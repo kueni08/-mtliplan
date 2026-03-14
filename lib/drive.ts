@@ -16,7 +16,7 @@ async function getAccessToken(): Promise<string> {
 
 async function findFileId(accessToken: string): Promise<string | null> {
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D'${FILENAME}'&fields=files(id)`,
+    `https://www.googleapis.com/drive/v3/files?q=name%3D'${FILENAME}'+and+trashed%3Dfalse&fields=files(id)`,
     {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
@@ -57,10 +57,9 @@ export async function writeAppData(data: AppData): Promise<void> {
   const body = JSON.stringify(data);
 
   if (!fileId) {
-    // Create new file in appDataFolder
+    // Create new file in Drive root
     const metadata = JSON.stringify({
       name: FILENAME,
-      parents: ["appDataFolder"],
     });
 
     const form = new FormData();
