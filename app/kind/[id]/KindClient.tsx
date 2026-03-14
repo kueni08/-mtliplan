@@ -15,7 +15,7 @@ interface KindClientProps {
   childId: string;
 }
 
-export default function KindClient({ childId }: KindClientProps) {
+function KindContent({ childId }: KindClientProps) {
   const { data, markChoreComplete, redeemReward } = useAppStore();
   const [justLeveledUp, setJustLeveledUp] = useState(false);
   const [xpAnimation, setXpAnimation] = useState<number | null>(null);
@@ -53,8 +53,7 @@ export default function KindClient({ childId }: KindClientProps) {
   };
 
   return (
-    <AppShell>
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+    <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
         {/* XP animation overlay */}
         {xpAnimation !== null && (
           <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
@@ -185,6 +184,13 @@ export default function KindClient({ childId }: KindClientProps) {
           childColor={child.color}
         />
       </div>
+  );
+}
+
+export default function KindClient({ childId }: KindClientProps) {
+  return (
+    <AppShell>
+      <KindContent childId={childId} />
     </AppShell>
   );
 }

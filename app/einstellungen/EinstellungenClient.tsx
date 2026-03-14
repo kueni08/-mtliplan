@@ -11,7 +11,7 @@ const CHORE_EMOJIS = ["🍽️", "🫧", "🛏️", "🗑️", "🧹", "🪣", "
 const REWARD_EMOJIS = ["🎬", "🍕", "😴", "🎮", "🍦", "🎁", "🏆", "🎯", "🎨", "🎵"];
 const CATEGORIES = ["küche", "zimmer", "haus", "sonstiges"] as const;
 
-export default function EinstellungenClient() {
+function EinstellungenContent() {
   const { data, updateChild, addChore, updateChore, deleteChore, addReward, updateReward, deleteReward, updateNextOurWeekend } = useAppStore();
   const [tab, setTab] = useState<"kinder" | "aufgaben" | "belohnungen" | "kalender">("kinder");
   const [editingChore, setEditingChore] = useState<string | null>(null);
@@ -31,8 +31,7 @@ export default function EinstellungenClient() {
   ];
 
   return (
-    <AppShell>
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+    <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
         <h1 className="text-2xl font-bold text-white">⚙️ Einstellungen</h1>
 
         {/* Tabs */}
@@ -274,6 +273,13 @@ export default function EinstellungenClient() {
           </div>
         )}
       </div>
+  );
+}
+
+export default function EinstellungenClient() {
+  return (
+    <AppShell>
+      <EinstellungenContent />
     </AppShell>
   );
 }

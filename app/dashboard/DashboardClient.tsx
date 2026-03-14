@@ -14,7 +14,7 @@ interface DashboardClientProps {
   userName: string;
 }
 
-export default function DashboardClient({ userName }: DashboardClientProps) {
+function DashboardContent({ userName }: DashboardClientProps) {
   const { data, approveCompletion, rejectCompletion } = useAppStore();
 
   if (!data) return null;
@@ -27,8 +27,7 @@ export default function DashboardClient({ userName }: DashboardClientProps) {
   const allPending = data.completions.filter((c) => !c.approved);
 
   return (
-    <AppShell>
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+    <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -170,6 +169,13 @@ export default function DashboardClient({ userName }: DashboardClientProps) {
           </div>
         )}
       </div>
+  );
+}
+
+export default function DashboardClient({ userName }: DashboardClientProps) {
+  return (
+    <AppShell>
+      <DashboardContent userName={userName} />
     </AppShell>
   );
 }
