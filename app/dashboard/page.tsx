@@ -1,0 +1,10 @@
+import { auth, signOut } from "@/auth";
+import { redirect } from "next/navigation";
+import DashboardClient from "./DashboardClient";
+
+export default async function DashboardPage() {
+  const session = await auth();
+  if (!session) redirect("/");
+
+  return <DashboardClient userName={session.user?.name ?? "Elternteil"} />;
+}
