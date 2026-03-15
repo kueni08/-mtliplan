@@ -21,9 +21,10 @@ function DashboardContent({ userName }: DashboardClientProps) {
   if (!data) return null;
 
   const kidsPresent = isKidPresentNow(data.settings.custodySchedule.nextOurWeekend);
-  const childStats = data.settings.children.map((c) =>
-    computeChildStats(data, c.id)
-  );
+  // Only show members with role "child" (or legacy entries without role)
+  const childStats = data.settings.children
+    .filter((c) => c.role === "child" || !c.role)
+    .map((c) => computeChildStats(data, c.id));
 
   const allPending = data.completions.filter((c) => !c.approved);
 

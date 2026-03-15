@@ -9,8 +9,7 @@ import ChoreCard from "@/components/ChoreCard";
 import RewardShop from "@/components/RewardShop";
 import CharacterAvatar from "@/components/CharacterAvatar";
 import { useAppStore } from "@/store/useAppStore";
-import { computeChildStats, hasCompletedChoreToday, getLevelInfo, getCharacterSkills, CHARACTER_SKILLS } from "@/lib/gamification";
-import { LEVELS } from "@/lib/gamification";
+import { computeChildStats, hasCompletedChoreToday, getLevelInfo, getCharacterSkills, CHARACTER_SKILLS, DEFAULT_LEVELS } from "@/lib/gamification";
 
 interface KindClientProps {
   childId: string;
@@ -32,7 +31,8 @@ function KindContent({ childId }: KindClientProps) {
 
   const stats = computeChildStats(data, childId);
   const activeChores = data.chores.filter((c) => c.active);
-  const levelInfo = getLevelInfo(stats.totalXP);
+  const effectiveLevels = data.settings.levelConfig ?? DEFAULT_LEVELS;
+  const levelInfo = getLevelInfo(stats.totalXP, effectiveLevels);
   const xpColor = child.color === "orange" ? "text-orange-300" : "text-purple-300";
   const bgGradient =
     child.color === "orange"
@@ -100,12 +100,12 @@ function KindContent({ childId }: KindClientProps) {
 
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-white/60">
-              <span>XP bis Level {stats.level + 1 <= LEVELS.length ? stats.level + 1 : "MAX"}</span>
+              <span>XP bis Level {stats.level + 1 <= effectiveLevels.length ? stats.level + 1 : "MAX"}</span>
               <span>{levelInfo.isMaxLevel ? "Maximum erreicht! 👑" : `noch ${levelInfo.xpNeeded} XP`}</span>
             </div>
             <XPBar
               current={stats.xpInCurrentLevel}
-              total={levelInfo.isMaxLevel ? 1 : levelInfo.xpForNextLevel - (LEVELS[stats.level - 1]?.minXP ?? 0)}
+              total={levelInfo.isMaxLevel ? 1 : levelInfo.xpForNextLevel - (effectiveLevels[stats.level - 1]?.minXP ?? 0)}
               percent={stats.progressPercent}
               color={child.color}
             />
