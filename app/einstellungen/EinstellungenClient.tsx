@@ -6,7 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { DEFAULT_LEVELS } from "@/lib/gamification";
 import { generateAssignments, calcAssignmentXP, getCurrentMonday } from "@/lib/scheduler";
 import { PlusIcon, TrashIcon, PencilIcon } from "@heroicons/react/24/solid";
-import type { Chore, Reward, HouseholdMember, LevelConfig, PresenceType, ChoreFrequency } from "@/lib/types";
+import type { Chore, Reward, HouseholdMember, LevelConfig, PresenceType, ChoreFrequency, ChoreAssignment } from "@/lib/types";
 
 const AVATARS = ["🦸", "🧙", "🦊", "🐉", "🦁", "🐺", "🦄", "🤖", "👾", "🎮", "🐼", "🐨"];
 
@@ -38,7 +38,8 @@ function EinstellungenContent() {
     addReward, updateReward, deleteReward,
     updateNextOurWeekend,
     updateLevelConfig, resetLevelConfig,
-    updatePresenceSchedule, saveAssignments,
+    updatePresenceSchedule, saveAssignments, reassignChore, removeAssignment,
+    setMemberPassword,
   } = useAppStore();
 
   const [tab, setTab]                 = useState<Tab>("haushalt");
@@ -163,6 +164,7 @@ function EinstellungenContent() {
                   member={member}
                   onSave={(updates) => { updateChild(member.id, updates); setEditingMember(null); }}
                   onCancel={() => setEditingMember(null)}
+                  onSetPassword={(hash) => setMemberPassword(member.id, hash)}
                 />
               );
             }
@@ -216,6 +218,19 @@ function EinstellungenContent() {
               Mitglied hinzufügen
             </button>
           )}
+
+          {/* Household token setup */}
+          <div className="glass rounded-2xl p-4 space-y-2 border border-yellow-500/20">
+            <h3 className="text-white/70 text-xs font-semibold uppercase tracking-wider">🔑 Kind-Login einrichten</h3>
+            <p className="text-white/50 text-xs">
+              Damit Kinder sich ohne Google-Konto einloggen können, muss einmalig der Haushalt-Token in Vercel gesetzt werden.
+            </p>
+            <ol className="text-white/50 text-xs space-y-1 list-decimal list-inside">
+              <li>Öffne <a href="/api/household-token" target="_blank" className="text-purple-300 underline">/api/household-token</a> und kopiere den Token</li>
+              <li>Füge ihn in Vercel → Settings → Environment Variables als <code className="bg-white/10 px-1 rounded">HOUSEHOLD_REFRESH_TOKEN</code> ein</li>
+              <li>Setze für jedes Kind ein Passwort (Bearbeiten → Passwort setzen)</li>
+            </ol>
+          </div>
         </div>
       )}
 
@@ -464,6 +479,17 @@ function EinstellungenContent() {
             📆 Vorschlag generieren (nächste 14 Tage)
           </button>
 
+          {/* Existing assignments list */}
+          {(data.assignments ?? []).length > 0 && !previewAssignments && (
+            <AssignmentList
+              assignments={data.assignments}
+              chores={data.chores}
+              children={children}
+              onReassign={(id, newChildId) => reassignChore(id, newChildId)}
+              onRemove={(id) => removeAssignment(id)}
+            />
+          )}
+
           {/* Preview */}
           {previewAssignments !== null && (() => {
             const xpTotals = calcAssignmentXP(previewAssignments, data);
@@ -520,16 +546,20 @@ function MemberEditForm({
   member,
   onSave,
   onCancel,
+  onSetPassword,
 }: {
   member: HouseholdMember;
   onSave: (u: Partial<HouseholdMember>) => void;
   onCancel: () => void;
+  onSetPassword?: (hash: string) => void;
 }) {
   const [name, setName]   = useState(member.name);
   const [avatar, setAvatar] = useState(member.avatar);
   const [color, setColor]   = useState(member.color);
   const [role, setRole]     = useState<HouseholdMember["role"]>(member.role ?? "child");
   const [theme, setTheme]   = useState<HouseholdMember["characterTheme"]>(member.characterTheme);
+  const [newPassword, setNewPassword] = useState("");
+  const [pwSaved, setPwSaved] = useState(false);
 
   return (
     <div className="glass rounded-2xl p-4 space-y-4 border border-purple-500/40">
@@ -611,6 +641,39 @@ function MemberEditForm({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Password setter for child accounts */}
+      {onSetPassword && (
+        <div className="border-t border-white/10 pt-3 space-y-2">
+          <p className="text-xs text-white/50">🔑 Login-Passwort setzen:</p>
+          <div className="flex gap-2">
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => { setNewPassword(e.target.value); setPwSaved(false); }}
+              placeholder="Neues Passwort"
+              className="flex-1 bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-400"
+            />
+            <button
+              type="button"
+              disabled={newPassword.length < 3}
+              onClick={async () => {
+                const bcrypt = await import("bcryptjs");
+                const hash = await bcrypt.hash(newPassword, 10);
+                onSetPassword(hash);
+                setNewPassword("");
+                setPwSaved(true);
+              }}
+              className="px-3 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 text-white text-sm rounded-xl font-medium transition-all"
+            >
+              {pwSaved ? "✓" : "Setzen"}
+            </button>
+          </div>
+          {member.passwordHash && !pwSaved && (
+            <p className="text-xs text-green-400/70">✓ Passwort bereits gesetzt</p>
+          )}
         </div>
       )}
 
@@ -934,6 +997,67 @@ function RewardEditForm({ reward, onSave, onCancel }: { reward: Reward; onSave: 
         <button onClick={onCancel} className="flex-1 bg-white/10 hover:bg-white/20 text-white py-2 rounded-xl transition-all">
           Abbrechen
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AssignmentList({
+  assignments,
+  chores,
+  children,
+  onReassign,
+  onRemove,
+}: {
+  assignments: ChoreAssignment[];
+  chores: Chore[];
+  children: HouseholdMember[];
+  onReassign: (id: string, newChildId: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const today = new Date().toISOString().split("T")[0];
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() + 7);
+  const cutoffStr = cutoff.toISOString().split("T")[0];
+
+  const upcoming = assignments
+    .filter((a) => a.date >= today && a.date <= cutoffStr)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.choreId.localeCompare(b.choreId));
+
+  if (upcoming.length === 0) return null;
+
+  return (
+    <div className="glass rounded-2xl p-4 space-y-3 border border-white/10">
+      <h3 className="font-bold text-white text-sm">📋 Zugeteilte Aufgaben — nächste 7 Tage</h3>
+      <div className="space-y-2">
+        {upcoming.map((a) => {
+          const chore = chores.find((c) => c.id === a.choreId);
+          if (!chore) return null;
+          const d = new Date(a.date + "T00:00:00");
+          const dayLabel = d.toLocaleDateString("de-CH", { weekday: "short", day: "numeric", month: "numeric" });
+          return (
+            <div key={a.id} className="flex items-center gap-2 text-sm">
+              <span className="text-white/40 w-20 shrink-0 text-xs">{dayLabel}</span>
+              <span className="text-xl">{chore.emoji}</span>
+              <span className="flex-1 text-white/80 truncate">{chore.title}</span>
+              <select
+                value={a.childId}
+                onChange={(e) => onReassign(a.id, e.target.value)}
+                className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-white text-xs focus:outline-none"
+              >
+                {children.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => onRemove(a.id)}
+                className="text-red-400/50 hover:text-red-400 p-1 shrink-0"
+              >
+                <TrashIcon className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

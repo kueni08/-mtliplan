@@ -12,6 +12,7 @@ export interface HouseholdMember {
   role: MemberRole;
   characterTheme?: CharacterTheme;
   email?: string;
+  passwordHash?: string; // bcryptjs hash for credential login (non-Google accounts)
 }
 
 // Backward-compat alias

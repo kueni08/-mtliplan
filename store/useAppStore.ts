@@ -49,6 +49,10 @@ interface AppStore {
   updatePresenceSchedule: (schedule: PresenceSchedule) => Promise<void>;
   saveAssignments: (assignments: ChoreAssignment[]) => Promise<void>;
   removeAssignment: (id: string) => Promise<void>;
+  reassignChore: (assignmentId: string, newChildId: string) => Promise<void>;
+
+  // Member credentials
+  setMemberPassword: (memberId: string, passwordHash: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -256,6 +260,31 @@ export const useAppStore = create<AppStore>((set, get) => ({
     await get()._save({
       ...data,
       assignments: (data.assignments ?? []).filter((a) => a.id !== id),
+    });
+  },
+
+  reassignChore: async (assignmentId, newChildId) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      assignments: (data.assignments ?? []).map((a) =>
+        a.id === assignmentId ? { ...a, childId: newChildId, source: "manual" as const } : a
+      ),
+    });
+  },
+
+  setMemberPassword: async (memberId, passwordHash) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      settings: {
+        ...data.settings,
+        children: data.settings.children.map((c) =>
+          c.id === memberId ? { ...c, passwordHash } : c
+        ),
+      },
     });
   },
 

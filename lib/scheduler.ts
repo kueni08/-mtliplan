@@ -67,6 +67,10 @@ export function generateAssignments(
       remaining[c.id] = CAPACITY[type];
     });
 
+    // Track chores already assigned today (exclusivity: one child per chore per day)
+    // multiple_daily chores are exempt from this constraint
+    const assignedChoreToday = new Set<string>();
+
     // Chores eligible today (sorted by XP descending for best equalization)
     const eligibleChores = activeChores
       .filter((chore) => {
@@ -79,6 +83,9 @@ export function generateAssignments(
       .sort((a, b) => b.xp - a.xp);
 
     for (const chore of eligibleChores) {
+      // Exclusivity: skip chore if already assigned to someone today (unless multiple_daily)
+      if (chore.frequency !== "multiple_daily" && assignedChoreToday.has(chore.id)) continue;
+
       // Children who still have capacity today
       let candidates = children.filter((c) => remaining[c.id] > 0);
 
@@ -105,6 +112,11 @@ export function generateAssignments(
 
       xpBalance[chosen.id] += chore.xp;
       remaining[chosen.id]--;
+
+      // Mark chore as taken today (exclusivity for non-multiple_daily)
+      if (chore.frequency !== "multiple_daily") {
+        assignedChoreToday.add(chore.id);
+      }
 
       if (chore.frequency === "weekly") {
         weeklyDone[chore.id][chosen.id].add(weekBlock);
