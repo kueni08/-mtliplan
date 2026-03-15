@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { readAppData, writeAppData } from "@/lib/drive";
-import type { AppData, Completion, Redemption, Chore, Reward, HouseholdMember, LevelConfig } from "@/lib/types";
+import type { AppData, Completion, Redemption, Chore, Reward, HouseholdMember, LevelConfig, PresenceSchedule, ChoreAssignment } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 
 interface AppStore {
@@ -44,6 +44,11 @@ interface AppStore {
   // Level config
   updateLevelConfig: (config: LevelConfig[]) => Promise<void>;
   resetLevelConfig: () => Promise<void>;
+
+  // Presence schedule & assignments
+  updatePresenceSchedule: (schedule: PresenceSchedule) => Promise<void>;
+  saveAssignments: (assignments: ChoreAssignment[]) => Promise<void>;
+  removeAssignment: (id: string) => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -225,6 +230,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (!data) return;
     const { levelConfig: _removed, ...settingsWithoutConfig } = data.settings;
     await get()._save({ ...data, settings: settingsWithoutConfig });
+  },
+
+  updatePresenceSchedule: async (schedule) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      settings: { ...data.settings, presenceSchedule: schedule },
+    });
+  },
+
+  saveAssignments: async (assignments) => {
+    const { data } = get();
+    if (!data) return;
+    // Replace suggested assignments, keep manual ones
+    const manual = (data.assignments ?? []).filter((a) => a.source === "manual");
+    const suggested = assignments.filter((a) => a.source === "suggested");
+    await get()._save({ ...data, assignments: [...manual, ...suggested] });
+  },
+
+  removeAssignment: async (id) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      assignments: (data.assignments ?? []).filter((a) => a.id !== id),
+    });
   },
 
   _save: async (updated: AppData) => {

@@ -1,4 +1,4 @@
-import type { AppData, ChildStats, Completion, LevelConfig } from "./types";
+import type { AppData, ChildStats, Completion, LevelConfig, CharacterTheme } from "./types";
 
 export interface CharacterSkill {
   level: number;
@@ -7,24 +7,59 @@ export interface CharacterSkill {
   desc: string;
 }
 
-export const CHARACTER_SKILLS: Record<"evoli" | "shire", CharacterSkill[]> = {
+export const CHARACTER_SKILLS: Record<CharacterTheme, CharacterSkill[]> = {
   evoli: [
-    { level: 1, name: "Ruff",          emoji: "💫", desc: "Einfacher, aber treuer Angriff" },
-    { level: 2, name: "Sandwolke",     emoji: "🌪️", desc: "Wirbelt Sand auf und verwirrt Gegner" },
-    { level: 3, name: "Blitzattacke",  emoji: "⚡", desc: "Immer zuerst – blitzschnell!" },
-    { level: 4, name: "Biss",          emoji: "🦷", desc: "Kraftvoller Biss, macht Angst" },
-    { level: 5, name: "Letzter Ausweg",emoji: "🌟", desc: "Die stärkste Attacke – maximale Kraft" },
+    { level: 1, name: "Ruff",           emoji: "💫", desc: "Einfacher, aber treuer Angriff" },
+    { level: 2, name: "Sandwolke",      emoji: "🌪️", desc: "Wirbelt Sand auf und verwirrt Gegner" },
+    { level: 3, name: "Blitzattacke",   emoji: "⚡", desc: "Immer zuerst – blitzschnell!" },
+    { level: 4, name: "Biss",           emoji: "🦷", desc: "Kraftvoller Biss, macht Angst" },
+    { level: 5, name: "Letzter Ausweg", emoji: "🌟", desc: "Die stärkste Attacke – maximale Kraft" },
   ],
   shire: [
-    { level: 1, name: "Schritt",           emoji: "🐾", desc: "Ruhig und sicher – kein Hindernis zu groß" },
-    { level: 2, name: "Trab",              emoji: "🏃", desc: "Gleichmäßig und ausdauernd" },
-    { level: 3, name: "Galopp",            emoji: "💨", desc: "Volle Fahrt voraus!" },
-    { level: 4, name: "Sprung",            emoji: "🦘", desc: "Überwindet jedes Hindernis mit Leichtigkeit" },
-    { level: 5, name: "Fliegender Galopp", emoji: "🌟", desc: "Unaufhaltbar – Legende des Stalls" },
+    { level: 1, name: "Schritt",            emoji: "🐾", desc: "Ruhig und sicher – kein Hindernis zu groß" },
+    { level: 2, name: "Trab",               emoji: "🏃", desc: "Gleichmäßig und ausdauernd" },
+    { level: 3, name: "Galopp",             emoji: "💨", desc: "Volle Fahrt voraus!" },
+    { level: 4, name: "Sprung",             emoji: "🦘", desc: "Überwindet jedes Hindernis mit Leichtigkeit" },
+    { level: 5, name: "Fliegender Galopp",  emoji: "🌟", desc: "Unaufhaltbar – Legende des Stalls" },
+  ],
+  pikachu: [
+    { level: 1, name: "Donnerblitz",   emoji: "⚡", desc: "Ein schwacher Elektroschock" },
+    { level: 2, name: "Ruckzuckhieb",  emoji: "💥", desc: "Trifft immer zuerst" },
+    { level: 3, name: "Eisenschweif",  emoji: "🔩", desc: "Schweifhieb – senkt Verteidigung" },
+    { level: 4, name: "Donnerwelle",   emoji: "🌊", desc: "Elektrische Welle trifft alle" },
+    { level: 5, name: "Voltakker",     emoji: "🌟", desc: "Die mächtigste Elektro-Attacke" },
+  ],
+  charmander: [
+    { level: 1, name: "Glut",          emoji: "🔥", desc: "Kleiner Feuerball – der Anfang" },
+    { level: 2, name: "Kratzer",       emoji: "🐾", desc: "Scharfe Klauen – senkt Verteidigung" },
+    { level: 3, name: "Flammenwurf",   emoji: "🌋", desc: "Feuerstrahl mit Verbrennungschance" },
+    { level: 4, name: "Drachenklauen", emoji: "🐉", desc: "Kraftvolle Drachenattacke" },
+    { level: 5, name: "Inferno",       emoji: "🌟", desc: "Alles vernichtende Flammen" },
+  ],
+  togepi: [
+    { level: 1, name: "Schlag",        emoji: "👊", desc: "Ein einfacher, aber treuer Schlag" },
+    { level: 2, name: "Metronom",      emoji: "🎵", desc: "Zufällige Attacke – immer überraschend!" },
+    { level: 3, name: "Schwerttanz",   emoji: "⚔️", desc: "Erhöht stark den Angriff" },
+    { level: 4, name: "Zauberschein",  emoji: "✨", desc: "Blendend schöner Angriff" },
+    { level: 5, name: "Wunschtraum",   emoji: "🌟", desc: "Heilende Glückskraft – legendär" },
+  ],
+  jigglypuff: [
+    { level: 1, name: "Pfund",         emoji: "🎤", desc: "Sanfter Schlag mit dem Mikro" },
+    { level: 2, name: "Gesang",        emoji: "🎶", desc: "Schläfert den Gegner ein" },
+    { level: 3, name: "Tränentropfer", emoji: "💧", desc: "Riesige Augen – senkt Spezial-Angriff" },
+    { level: 4, name: "Mondangriff",   emoji: "🌙", desc: "Mondkraft schlägt zu" },
+    { level: 5, name: "Hyperstrahl",   emoji: "🌟", desc: "Der stärkste Normalangriff" },
+  ],
+  squirtle: [
+    { level: 1, name: "Blubber",       emoji: "💦", desc: "Kleine Wasserblasen – schwächt Angriff" },
+    { level: 2, name: "Aquaknarre",    emoji: "🔫", desc: "Gezielter Wasserstrahl" },
+    { level: 3, name: "Surfer",        emoji: "🏄", desc: "Riesige Welle überrollt alles" },
+    { level: 4, name: "Wasserring",    emoji: "💎", desc: "Schützender Wasserring" },
+    { level: 5, name: "Hydropumpe",    emoji: "🌟", desc: "Gewaltiger Hochdruckstrahl" },
   ],
 };
 
-export function getCharacterSkills(theme: "evoli" | "shire", level: number): CharacterSkill[] {
+export function getCharacterSkills(theme: CharacterTheme, level: number): CharacterSkill[] {
   return CHARACTER_SKILLS[theme].filter((s) => s.level <= level);
 }
 

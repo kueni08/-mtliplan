@@ -31,6 +31,8 @@ async function findFileId(accessToken: string): Promise<string | null> {
 function migrateData(raw: AppData): AppData {
   return {
     ...raw,
+    // Ensure assignments array exists
+    assignments: raw.assignments ?? [],
     settings: {
       ...raw.settings,
       // Ensure all household members have a role (backward compat)

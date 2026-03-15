@@ -1,5 +1,8 @@
 export type MemberRole = "child" | "adult";
 export type MemberColor = "purple" | "orange";
+export type CharacterTheme = "evoli" | "shire" | "pikachu" | "charmander" | "togepi" | "jigglypuff" | "squirtle";
+export type PresenceType = "absent" | "halbtag" | "ganztag";
+export type ChoreFrequency = "daily" | "weekly" | "multiple_daily" | "manual";
 
 export interface HouseholdMember {
   id: string;
@@ -7,11 +10,11 @@ export interface HouseholdMember {
   avatar: string;
   color: MemberColor;
   role: MemberRole;
-  characterTheme?: "evoli" | "shire";
-  email?: string; // optional, for adult members
+  characterTheme?: CharacterTheme;
+  email?: string;
 }
 
-// Keep Child as alias for backward compatibility
+// Backward-compat alias
 export type Child = HouseholdMember;
 
 export interface LevelConfig {
@@ -28,6 +31,7 @@ export interface Chore {
   category: "küche" | "zimmer" | "haus" | "sonstiges";
   emoji: string;
   active: boolean;
+  frequency?: ChoreFrequency; // default "daily"
 }
 
 export interface Reward {
@@ -57,14 +61,32 @@ export interface Redemption {
 }
 
 export interface CustodySchedule {
-  // ISO date string of the Friday of the next "our" weekend
-  nextOurWeekend: string;
+  nextOurWeekend: string; // ISO date string (Friday)
+}
+
+export interface PresencePattern {
+  childId: string;
+  days: PresenceType[]; // length=14; index 0=Mon week1 … 6=Sun week1, 7=Mon week2 … 13=Sun week2
+}
+
+export interface PresenceSchedule {
+  cycleStartDate: string; // ISO date of the Monday of week 1
+  patterns: PresencePattern[];
+}
+
+export interface ChoreAssignment {
+  id: string;
+  choreId: string;
+  childId: string;
+  date: string;           // ISO date
+  source: "suggested" | "manual";
 }
 
 export interface AppSettings {
   children: HouseholdMember[];
   custodySchedule: CustodySchedule;
-  levelConfig?: LevelConfig[]; // custom level thresholds; uses defaults if missing
+  levelConfig?: LevelConfig[];
+  presenceSchedule?: PresenceSchedule;
 }
 
 export interface AppData {
@@ -74,6 +96,7 @@ export interface AppData {
   rewards: Reward[];
   completions: Completion[];
   redemptions: Redemption[];
+  assignments: ChoreAssignment[]; // planned chore assignments
 }
 
 // Derived / computed types
