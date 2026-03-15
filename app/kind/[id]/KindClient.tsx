@@ -7,8 +7,9 @@ import XPBar from "@/components/XPBar";
 import LevelBadge from "@/components/LevelBadge";
 import ChoreCard from "@/components/ChoreCard";
 import RewardShop from "@/components/RewardShop";
+import CharacterAvatar from "@/components/CharacterAvatar";
 import { useAppStore } from "@/store/useAppStore";
-import { computeChildStats, hasCompletedChoreToday, getLevelInfo } from "@/lib/gamification";
+import { computeChildStats, hasCompletedChoreToday, getLevelInfo, getCharacterSkills, CHARACTER_SKILLS } from "@/lib/gamification";
 import { LEVELS } from "@/lib/gamification";
 
 interface KindClientProps {
@@ -80,11 +81,12 @@ function KindContent({ childId }: KindClientProps) {
         {/* Profile header */}
         <div className={`glass rounded-3xl p-5 bg-gradient-to-br ${bgGradient} space-y-4`}>
           <div className="flex items-center gap-4">
-            <div
-              className={`text-6xl ${justLeveledUp ? "level-up-animate" : ""}`}
-              style={{ fontSize: "4rem" }}
-            >
-              {child.avatar}
+            <div className={justLeveledUp ? "level-up-animate" : ""}>
+              {child.characterTheme ? (
+                <CharacterAvatar theme={child.characterTheme} level={stats.level} size="md" />
+              ) : (
+                <span style={{ fontSize: "4rem" }}>{child.avatar}</span>
+              )}
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-black text-white">{child.name}</h1>
@@ -117,6 +119,41 @@ function KindContent({ childId }: KindClientProps) {
             </div>
           )}
         </div>
+
+        {/* Character skills */}
+        {child.characterTheme && (
+          <div className="glass rounded-3xl p-4 space-y-3">
+            <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">⚔️ Fähigkeiten</h2>
+            <div className="grid grid-cols-1 gap-2">
+              {CHARACTER_SKILLS[child.characterTheme].map((skill) => {
+                const unlocked = skill.level <= stats.level;
+                return (
+                  <div
+                    key={skill.level}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-all ${
+                      unlocked
+                        ? "bg-white/10 border border-white/20"
+                        : "bg-white/3 border border-white/5 opacity-50"
+                    }`}
+                  >
+                    <span className="text-2xl">{unlocked ? skill.emoji : "🔒"}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold ${unlocked ? "text-white" : "text-white/40"}`}>
+                        {skill.name}
+                      </p>
+                      <p className={`text-xs ${unlocked ? "text-white/60" : "text-white/30"}`}>
+                        {unlocked ? skill.desc : `Level ${skill.level} erforderlich`}
+                      </p>
+                    </div>
+                    {unlocked && (
+                      <span className="text-xs text-green-400 font-bold shrink-0">✓</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Today's chores */}
         <div className="space-y-3">

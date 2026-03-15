@@ -11,15 +11,17 @@ export function getDefaultData(): AppData {
       children: [
         {
           id: "child-1",
-          name: "Kind 1",
-          avatar: "🦸",
+          name: "Nils",
+          avatar: "🦊",
           color: "purple",
+          characterTheme: "evoli" as const,
         },
         {
           id: "child-2",
-          name: "Kind 2",
-          avatar: "🧙",
+          name: "Lou",
+          avatar: "🐴",
           color: "orange",
+          characterTheme: "shire" as const,
         },
       ],
       custodySchedule: {

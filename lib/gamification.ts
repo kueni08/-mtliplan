@@ -1,5 +1,33 @@
 import type { AppData, ChildStats, Completion, Redemption } from "./types";
 
+export interface CharacterSkill {
+  level: number;
+  name: string;
+  emoji: string;
+  desc: string;
+}
+
+export const CHARACTER_SKILLS: Record<"evoli" | "shire", CharacterSkill[]> = {
+  evoli: [
+    { level: 1, name: "Ruff",          emoji: "💫", desc: "Einfacher, aber treuer Angriff" },
+    { level: 2, name: "Sandwolke",     emoji: "🌪️", desc: "Wirbelt Sand auf und verwirrt Gegner" },
+    { level: 3, name: "Blitzattacke",  emoji: "⚡", desc: "Immer zuerst – blitzschnell!" },
+    { level: 4, name: "Biss",          emoji: "🦷", desc: "Kraftvoller Biss, macht Angst" },
+    { level: 5, name: "Letzter Ausweg",emoji: "🌟", desc: "Die stärkste Attacke – maximale Kraft" },
+  ],
+  shire: [
+    { level: 1, name: "Schritt",           emoji: "🐾", desc: "Ruhig und sicher – kein Hindernis zu groß" },
+    { level: 2, name: "Trab",              emoji: "🏃", desc: "Gleichmäßig und ausdauernd" },
+    { level: 3, name: "Galopp",            emoji: "💨", desc: "Volle Fahrt voraus!" },
+    { level: 4, name: "Sprung",            emoji: "🦘", desc: "Überwindet jedes Hindernis mit Leichtigkeit" },
+    { level: 5, name: "Fliegender Galopp", emoji: "🌟", desc: "Unaufhaltbar – Legende des Stalls" },
+  ],
+};
+
+export function getCharacterSkills(theme: "evoli" | "shire", level: number): CharacterSkill[] {
+  return CHARACTER_SKILLS[theme].filter((s) => s.level <= level);
+}
+
 export const LEVELS = [
   { level: 1, minXP: 0, maxXP: 99, emoji: "🌱", label: "Anfänger", color: "text-green-400" },
   { level: 2, minXP: 100, maxXP: 249, emoji: "⭐", label: "Helfer", color: "text-yellow-400" },

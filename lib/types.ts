@@ -1,8 +1,9 @@
 export interface Child {
   id: string;
   name: string;
-  avatar: string; // emoji
+  avatar: string; // emoji (fallback)
   color: "purple" | "orange"; // theme color
+  characterTheme?: "evoli" | "shire"; // custom SVG character
 }
 
 export interface Chore {
