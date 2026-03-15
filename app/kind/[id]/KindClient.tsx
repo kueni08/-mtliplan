@@ -30,7 +30,18 @@ function KindContent({ childId }: KindClientProps) {
   }
 
   const stats = computeChildStats(data, childId);
-  const activeChores = data.chores.filter((c) => c.active);
+
+  // Today's assignments → show only assigned chores; fallback to all active
+  const today = new Date().toISOString().split("T")[0];
+  const todayAssignments = (data.assignments ?? []).filter(
+    (a) => a.childId === childId && a.date === today
+  );
+  const assignedChores = todayAssignments
+    .map((a) => data.chores.find((c) => c.id === a.choreId))
+    .filter((c): c is NonNullable<typeof c> => c !== undefined && c.active);
+  const activeChores = assignedChores.length > 0
+    ? assignedChores
+    : data.chores.filter((c) => c.active);
   const effectiveLevels = data.settings.levelConfig ?? DEFAULT_LEVELS;
   const levelInfo = getLevelInfo(stats.totalXP, effectiveLevels);
   const xpColor = child.color === "orange" ? "text-orange-300" : "text-purple-300";
@@ -157,20 +168,24 @@ function KindContent({ childId }: KindClientProps) {
 
         {/* Today's chores */}
         <div className="space-y-3">
-          <h2 className="text-lg font-bold text-white">
-            📋 Aufgaben von heute
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white">📋 Aufgaben von heute</h2>
+            {assignedChores.length > 0 && (
+              <span className="text-xs text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded-full">📆 Zugeteilt</span>
+            )}
+          </div>
           {activeChores.length === 0 ? (
             <p className="text-white/50 text-center py-6">Noch keine Aufgaben eingerichtet</p>
           ) : (
             <div className="space-y-2">
               {activeChores.map((chore) => {
-                const completed = hasCompletedChoreToday(
+                const isMultiDaily = chore.frequency === "multiple_daily";
+                const completed = !isMultiDaily && hasCompletedChoreToday(
                   data.completions.filter((c) => c.approved),
                   chore.id,
                   childId
                 );
-                const pending = hasCompletedChoreToday(
+                const pending = !isMultiDaily && hasCompletedChoreToday(
                   data.completions.filter((c) => !c.approved),
                   chore.id,
                   childId

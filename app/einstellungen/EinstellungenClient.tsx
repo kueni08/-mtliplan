@@ -4,15 +4,31 @@ import { useState } from "react";
 import AppShell from "@/components/AppShell";
 import { useAppStore } from "@/store/useAppStore";
 import { DEFAULT_LEVELS } from "@/lib/gamification";
+import { generateAssignments, calcAssignmentXP, getCurrentMonday } from "@/lib/scheduler";
 import { PlusIcon, TrashIcon, PencilIcon } from "@heroicons/react/24/solid";
-import type { Chore, Reward, HouseholdMember, LevelConfig } from "@/lib/types";
+import type { Chore, Reward, HouseholdMember, LevelConfig, PresenceType, ChoreFrequency } from "@/lib/types";
 
 const AVATARS = ["🦸", "🧙", "🦊", "🐉", "🦁", "🐺", "🦄", "🤖", "👾", "🎮", "🐼", "🐨"];
+
+const THEME_OPTIONS = [
+  [undefined,     "🎲 Keiner"],
+  ["evoli",       "🦊 Evoli"],
+  ["shire",       "🐴 Shire"],
+  ["pikachu",     "⚡ Pikachu"],
+  ["charmander",  "🔥 Glumanda"],
+  ["togepi",      "🥚 Togepi"],
+  ["jigglypuff",  "🎤 Pummeluff"],
+  ["squirtle",    "💦 Schiggy"],
+] as const;
+
+const THEME_LABELS: Record<string, string> = Object.fromEntries(
+  THEME_OPTIONS.filter(([t]) => t !== undefined).map(([t, l]) => [t, l])
+);
 const CHORE_EMOJIS  = ["🍽️","🫧","🛏️","🗑️","🧹","🪣","🌿","🧺","🚿","🪟","🧽","🫙"];
 const REWARD_EMOJIS = ["🎬","🍕","😴","🎮","🍦","🎁","🏆","🎯","🎨","🎵","🎲","🎪"];
 const CATEGORIES = ["küche","zimmer","haus","sonstiges"] as const;
 
-type Tab = "haushalt" | "aufgaben" | "belohnungen" | "stufen" | "kalender";
+type Tab = "haushalt" | "aufgaben" | "belohnungen" | "stufen" | "wochenplan";
 
 function EinstellungenContent() {
   const {
@@ -22,6 +38,7 @@ function EinstellungenContent() {
     addReward, updateReward, deleteReward,
     updateNextOurWeekend,
     updateLevelConfig, resetLevelConfig,
+    updatePresenceSchedule, saveAssignments,
   } = useAppStore();
 
   const [tab, setTab]                 = useState<Tab>("haushalt");
@@ -30,10 +47,21 @@ function EinstellungenContent() {
   const [editingChore,  setEditingChore]  = useState<string | null>(null);
   const [editingReward, setEditingReward] = useState<string | null>(null);
   const [editingLevel,  setEditingLevel]  = useState<number | null>(null);
-  const [newChore,  setNewChore]  = useState<Partial<Chore>>({});
-  const [newReward, setNewReward] = useState<Partial<Reward>>({});
   const [showAddChore,  setShowAddChore]  = useState(false);
   const [showAddReward, setShowAddReward] = useState(false);
+
+  // Wochenplan state
+  const [cycleStart, setCycleStart] = useState(() => data?.settings.presenceSchedule?.cycleStartDate ?? getCurrentMonday());
+  const [presenceDraft, setPresenceDraft] = useState<Record<string, PresenceType[]>>(() => {
+    const patterns = data?.settings.presenceSchedule?.patterns ?? [];
+    const init: Record<string, PresenceType[]> = {};
+    (data?.settings.children ?? []).filter(c => c.role === "child" || !c.role).forEach(c => {
+      const p = patterns.find(p => p.childId === c.id);
+      init[c.id] = p?.days ?? Array(14).fill("absent" as PresenceType);
+    });
+    return init;
+  });
+  const [previewAssignments, setPreviewAssignments] = useState<ReturnType<typeof generateAssignments> | null>(null);
 
   if (!data) return null;
 
@@ -44,8 +72,52 @@ function EinstellungenContent() {
     { id: "aufgaben",    label: "Aufgaben",    emoji: "📋" },
     { id: "belohnungen", label: "Belohnungen", emoji: "🎁" },
     { id: "stufen",      label: "Stufen",      emoji: "📊" },
-    { id: "kalender",    label: "Kalender",    emoji: "📅" },
+    { id: "wochenplan",  label: "Wochenplan",  emoji: "📆" },
   ];
+
+  const children = data.settings.children.filter(c => c.role === "child" || !c.role);
+
+  const PRESENCE_CYCLE: PresenceType[] = ["absent", "halbtag", "ganztag"];
+  const togglePresence = (childId: string, dayIdx: number) => {
+    setPresenceDraft(prev => {
+      const days = [...(prev[childId] ?? Array(14).fill("absent" as PresenceType))];
+      const cur = days[dayIdx] as PresenceType;
+      days[dayIdx] = PRESENCE_CYCLE[(PRESENCE_CYCLE.indexOf(cur) + 1) % PRESENCE_CYCLE.length];
+      return { ...prev, [childId]: days };
+    });
+  };
+
+  const savePresence = async () => {
+    const patterns = children.map(c => ({
+      childId: c.id,
+      days: presenceDraft[c.id] ?? Array(14).fill("absent" as PresenceType),
+    }));
+    await updatePresenceSchedule({ cycleStartDate: cycleStart, patterns });
+  };
+
+  const generatePreview = () => {
+    if (!data) return;
+    const from = new Date();
+    const fromStr = from.toISOString().split("T")[0];
+    const to = new Date(from);
+    to.setDate(to.getDate() + 13);
+    const toStr = to.toISOString().split("T")[0];
+    // Use draft as temp data for preview
+    const patterns = children.map(c => ({
+      childId: c.id,
+      days: presenceDraft[c.id] ?? Array(14).fill("absent" as PresenceType),
+    }));
+    const tempData = { ...data, settings: { ...data.settings, presenceSchedule: { cycleStartDate: cycleStart, patterns } } };
+    const assignments = generateAssignments(tempData, fromStr, toStr);
+    setPreviewAssignments(assignments);
+  };
+
+  const applyAssignments = async () => {
+    if (!previewAssignments) return;
+    await savePresence();
+    await saveAssignments(previewAssignments);
+    setPreviewAssignments(null);
+  };
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
@@ -109,7 +181,7 @@ function EinstellungenContent() {
                     </span>
                     {member.characterTheme && (
                       <span className="text-xs text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded-full">
-                        {member.characterTheme === "evoli" ? "🦊 Evoli" : "🐴 Shire"}
+                        {THEME_LABELS[member.characterTheme] ?? member.characterTheme}
                       </span>
                     )}
                   </div>
@@ -168,7 +240,7 @@ function EinstellungenContent() {
                   <p className={`font-medium text-sm ${chore.active ? "text-white" : "text-white/40 line-through"}`}>
                     {chore.title}
                   </p>
-                  <p className="text-xs text-purple-300">+{chore.xp} XP · {chore.category}</p>
+                  <p className="text-xs text-purple-300">+{chore.xp} XP · {chore.category} · {FREQUENCY_OPTIONS.find(f => f.value === (chore.frequency ?? "daily"))?.label ?? "Täglich"}</p>
                 </div>
                 <button
                   onClick={() => updateChore(chore.id, { active: !chore.active })}
@@ -314,36 +386,120 @@ function EinstellungenContent() {
         </div>
       )}
 
-      {/* ── KALENDER ── */}
-      {tab === "kalender" && (
+      {/* ── WOCHENPLAN ── */}
+      {tab === "wochenplan" && (
         <div className="space-y-4">
           <div className="glass rounded-2xl p-4 space-y-3">
-            <h3 className="font-bold text-white">📅 Betreuungsplan</h3>
-            <p className="text-white/60 text-sm">
-              Die Kinder sind immer <strong className="text-white">Di. Abend bis Mi. Abend</strong> da.
-              Dazu jedes zweite Wochenende (<strong className="text-white">Fr. Abend bis So. Abend</strong>).
+            <h3 className="font-bold text-white">📆 2-Wochen-Anwesenheitsplan</h3>
+            <p className="text-white/60 text-xs">
+              Lege fest, wann jedes Kind anwesend ist. Klicke auf die Zellen um zu wechseln.
             </p>
             <div>
-              <label className="text-xs text-white/50 block mb-1">
-                Nächstes Wochenende bei uns (Freitag-Datum):
-              </label>
+              <label className="text-xs text-white/50 block mb-1">Zyklusstart (Montag):</label>
               <input
                 type="date"
-                value={data.settings.custodySchedule.nextOurWeekend}
-                onChange={(e) => updateNextOurWeekend(e.target.value)}
+                value={cycleStart}
+                onChange={(e) => setCycleStart(e.target.value)}
                 className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-400 [color-scheme:dark]"
               />
             </div>
           </div>
 
-          <div className="glass rounded-2xl p-4 space-y-2">
-            <h3 className="font-bold text-white text-sm">ℹ️ Info</h3>
-            <ul className="text-white/60 text-sm space-y-1">
-              <li>• Di 18:00 → Mi 18:00 (jede Woche)</li>
-              <li>• Fr 18:00 → So 18:00 (jedes 2. WE)</li>
-              <li>• Dashboard zeigt an, ob Kinder gerade da sind</li>
-            </ul>
+          {/* Legend */}
+          <div className="flex gap-4 text-xs text-white/60 px-1">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-500/40 inline-block" />Ganztag</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-500/40 inline-block" />Halbtag</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-600 inline-block" />Abwesend</span>
           </div>
+
+          {/* Grid */}
+          <div className="glass rounded-2xl p-3 overflow-x-auto">
+            <table className="w-full min-w-[340px] text-xs">
+              <thead>
+                <tr>
+                  <th className="text-left text-white/40 pb-2 pr-2 font-normal">Kind</th>
+                  {["Mo","Di","Mi","Do","Fr","Sa","So","Mo","Di","Mi","Do","Fr","Sa","So"].map((d, i) => (
+                    <th key={i} className={`pb-2 font-normal text-center ${i < 7 ? "text-blue-300/70" : "text-purple-300/70"}`}>{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {children.map(child => (
+                  <tr key={child.id}>
+                    <td className="pr-2 py-1 text-white/70 whitespace-nowrap font-medium">{child.name}</td>
+                    {Array.from({ length: 14 }, (_, i) => {
+                      const type = (presenceDraft[child.id]?.[i] ?? "absent") as PresenceType;
+                      return (
+                        <td key={i} className="py-1 px-0.5">
+                          <button
+                            onClick={() => togglePresence(child.id, i)}
+                            className={`w-7 h-7 rounded-lg text-center text-sm transition-all ${
+                              type === "ganztag"  ? "bg-green-500/30 text-green-300 hover:bg-green-500/50" :
+                              type === "halbtag"  ? "bg-yellow-500/30 text-yellow-300 hover:bg-yellow-500/50" :
+                                                   "bg-gray-700/50 text-gray-500 hover:bg-gray-600/50"
+                            }`}
+                          >
+                            {type === "ganztag" ? "●" : type === "halbtag" ? "½" : "–"}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            onClick={savePresence}
+            className="w-full glass rounded-2xl p-3 flex items-center justify-center gap-2 text-green-300 hover:text-white border border-green-500/30 hover:border-green-400/50 transition-all text-sm font-medium"
+          >
+            💾 Anwesenheitsplan speichern
+          </button>
+
+          <button
+            onClick={generatePreview}
+            className="w-full glass rounded-2xl p-3 flex items-center justify-center gap-2 text-blue-300 hover:text-white border-dashed border border-blue-500/30 hover:border-blue-400/50 transition-all text-sm font-medium"
+          >
+            📆 Vorschlag generieren (nächste 14 Tage)
+          </button>
+
+          {/* Preview */}
+          {previewAssignments !== null && (() => {
+            const xpTotals = calcAssignmentXP(previewAssignments, data);
+            return (
+              <div className="glass rounded-2xl p-4 space-y-3 border border-blue-500/30">
+                <h3 className="font-bold text-white">Vorschau</h3>
+
+                {/* XP balance */}
+                <div className="flex gap-3">
+                  {children.map(c => (
+                    <div key={c.id} className="flex-1 bg-white/5 rounded-xl p-3 text-center">
+                      <p className="text-white font-bold">{c.name}</p>
+                      <p className="text-purple-300 text-lg font-black">{xpTotals[c.id] ?? 0} XP</p>
+                    </div>
+                  ))}
+                </div>
+
+                <p className="text-white/50 text-xs">{previewAssignments.length} Aufgaben-Zuteilungen</p>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyAssignments}
+                    className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded-xl font-medium text-sm transition-all"
+                  >
+                    ✅ Übernehmen
+                  </button>
+                  <button
+                    onClick={() => setPreviewAssignments(null)}
+                    className="flex-1 bg-white/10 hover:bg-white/20 text-white py-2 rounded-xl text-sm transition-all"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -443,14 +599,10 @@ function MemberEditForm({
         <div>
           <p className="text-xs text-white/50 mb-2">Charakter:</p>
           <div className="flex gap-2 flex-wrap">
-            {([
-              [undefined, "🎲 Keiner"],
-              ["evoli",   "🦊 Evoli"],
-              ["shire",   "🐴 Shire"],
-            ] as const).map(([t, label]) => (
+            {THEME_OPTIONS.map(([t, label]) => (
               <button
                 key={String(t)}
-                onClick={() => setTheme(t)}
+                onClick={() => setTheme(t as HouseholdMember["characterTheme"])}
                 className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                   theme === t ? "bg-purple-600 text-white" : "bg-white/10 text-white/60"
                 }`}
@@ -541,15 +693,11 @@ function MemberAddForm({
       {role === "child" && (
         <div>
           <p className="text-xs text-white/50 mb-2">Charakter (optional):</p>
-          <div className="flex gap-2">
-            {([
-              [undefined, "🎲 Keiner"],
-              ["evoli",   "🦊 Evoli"],
-              ["shire",   "🐴 Shire"],
-            ] as const).map(([t, label]) => (
+          <div className="flex gap-2 flex-wrap">
+            {THEME_OPTIONS.map(([t, label]) => (
               <button
                 key={String(t)}
-                onClick={() => setTheme(t)}
+                onClick={() => setTheme(t as HouseholdMember["characterTheme"])}
                 className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
                   theme === t ? "bg-purple-600 text-white" : "bg-white/10 text-white/60"
                 }`}
@@ -665,11 +813,19 @@ function LevelEditForm({
   );
 }
 
+const FREQUENCY_OPTIONS: { value: ChoreFrequency; label: string }[] = [
+  { value: "daily",          label: "Täglich" },
+  { value: "weekly",         label: "Wöchentlich" },
+  { value: "multiple_daily", label: "Mehrmals tägl." },
+  { value: "manual",         label: "Manuell" },
+];
+
 function ChoreEditForm({ chore, onSave, onCancel }: { chore: Chore; onSave: (u: Partial<Chore>) => void; onCancel: () => void }) {
-  const [title, setTitle]       = useState(chore.title);
-  const [xp, setXp]             = useState(chore.xp);
-  const [emoji, setEmoji]       = useState(chore.emoji);
-  const [category, setCategory] = useState(chore.category);
+  const [title, setTitle]         = useState(chore.title);
+  const [xp, setXp]               = useState(chore.xp);
+  const [emoji, setEmoji]         = useState(chore.emoji);
+  const [category, setCategory]   = useState(chore.category);
+  const [frequency, setFrequency] = useState<ChoreFrequency>(chore.frequency ?? "daily");
   return (
     <div className="glass rounded-2xl p-4 space-y-3 border border-purple-500/40">
       <div className="flex gap-2">
@@ -690,8 +846,12 @@ function ChoreEditForm({ chore, onSave, onCancel }: { chore: Chore; onSave: (u: 
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <select value={frequency} onChange={(e) => setFrequency(e.target.value as ChoreFrequency)}
+        className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none text-sm">
+        {FREQUENCY_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+      </select>
       <div className="flex gap-2">
-        <button onClick={() => onSave({ title, xp, emoji, category })}
+        <button onClick={() => onSave({ title, xp, emoji, category, frequency })}
           className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl font-medium transition-all">
           Speichern
         </button>
@@ -704,10 +864,11 @@ function ChoreEditForm({ chore, onSave, onCancel }: { chore: Chore; onSave: (u: 
 }
 
 function ChoreAddForm({ onSave, onCancel }: { onSave: (c: Omit<Chore, "id">) => void; onCancel: () => void }) {
-  const [title, setTitle]       = useState("");
-  const [xp, setXp]             = useState(10);
-  const [emoji, setEmoji]       = useState("🧹");
-  const [category, setCategory] = useState<Chore["category"]>("haus");
+  const [title, setTitle]         = useState("");
+  const [xp, setXp]               = useState(10);
+  const [emoji, setEmoji]         = useState("🧹");
+  const [category, setCategory]   = useState<Chore["category"]>("haus");
+  const [frequency, setFrequency] = useState<ChoreFrequency>("daily");
   return (
     <div className="glass rounded-2xl p-4 space-y-3 border border-purple-500/40">
       <p className="text-white font-medium text-sm">Neue Aufgabe</p>
@@ -729,8 +890,12 @@ function ChoreAddForm({ onSave, onCancel }: { onSave: (c: Omit<Chore, "id">) => 
           {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
+      <select value={frequency} onChange={(e) => setFrequency(e.target.value as ChoreFrequency)}
+        className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none text-sm">
+        {FREQUENCY_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+      </select>
       <div className="flex gap-2">
-        <button onClick={() => title && onSave({ title, xp, emoji, category, active: true })}
+        <button onClick={() => title && onSave({ title, xp, emoji, category, active: true, frequency })}
           disabled={!title}
           className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 text-white py-2 rounded-xl font-medium transition-all">
           Hinzufügen

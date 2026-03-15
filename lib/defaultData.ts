@@ -45,6 +45,7 @@ export function getDefaultData(): AppData {
     ],
     completions: [],
     redemptions: [],
+    assignments: [],
   };
 }
 
