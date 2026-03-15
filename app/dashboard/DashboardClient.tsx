@@ -5,6 +5,7 @@ import Link from "next/link";
 import AppShell from "@/components/AppShell";
 import LevelBadge from "@/components/LevelBadge";
 import XPBar from "@/components/XPBar";
+import CharacterAvatar from "@/components/CharacterAvatar";
 import { useAppStore } from "@/store/useAppStore";
 import { computeChildStats } from "@/lib/gamification";
 import { isKidPresentNow } from "@/lib/custody";
@@ -20,9 +21,10 @@ function DashboardContent({ userName }: DashboardClientProps) {
   if (!data) return null;
 
   const kidsPresent = isKidPresentNow(data.settings.custodySchedule.nextOurWeekend);
-  const childStats = data.settings.children.map((c) =>
-    computeChildStats(data, c.id)
-  );
+  // Only show members with role "child" (or legacy entries without role)
+  const childStats = data.settings.children
+    .filter((c) => c.role === "child" || !c.role)
+    .map((c) => computeChildStats(data, c.id));
 
   const allPending = data.completions.filter((c) => !c.approved);
 
@@ -114,7 +116,11 @@ function DashboardContent({ userName }: DashboardClientProps) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <span className="text-4xl">{stats.child.avatar}</span>
+                  {stats.child.characterTheme ? (
+                    <CharacterAvatar theme={stats.child.characterTheme} level={stats.level} size="sm" />
+                  ) : (
+                    <span className="text-4xl">{stats.child.avatar}</span>
+                  )}
                   <div>
                     <p className="font-bold text-white text-lg">{stats.child.name}</p>
                     <LevelBadge level={stats.level} size="sm" />

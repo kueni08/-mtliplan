@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { readAppData, writeAppData } from "@/lib/drive";
-import type { AppData, Completion, Redemption, Chore, Reward, Child } from "@/lib/types";
+import type { AppData, Completion, Redemption, Chore, Reward, HouseholdMember, LevelConfig } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 
 interface AppStore {
@@ -11,10 +11,8 @@ interface AppStore {
   saving: boolean;
   error: string | null;
 
-  // Internal helper
   _save: (data: AppData) => Promise<void>;
 
-  // Data loading
   loadData: () => Promise<void>;
 
   // Chore completions
@@ -25,15 +23,27 @@ interface AppStore {
   // Rewards
   redeemReward: (rewardId: string, childId: string) => Promise<void>;
 
-  // Settings
-  updateChild: (childId: string, updates: Partial<Child>) => Promise<void>;
+  // Household member management
+  updateChild: (childId: string, updates: Partial<HouseholdMember>) => Promise<void>;
+  addHouseholdMember: (member: Omit<HouseholdMember, "id">) => Promise<void>;
+  removeHouseholdMember: (memberId: string) => Promise<void>;
+
+  // Chore management
   addChore: (chore: Omit<Chore, "id">) => Promise<void>;
   updateChore: (choreId: string, updates: Partial<Chore>) => Promise<void>;
   deleteChore: (choreId: string) => Promise<void>;
+
+  // Reward management
   addReward: (reward: Omit<Reward, "id">) => Promise<void>;
   updateReward: (rewardId: string, updates: Partial<Reward>) => Promise<void>;
   deleteReward: (rewardId: string) => Promise<void>;
+
+  // Schedule
   updateNextOurWeekend: (date: string) => Promise<void>;
+
+  // Level config
+  updateLevelConfig: (config: LevelConfig[]) => Promise<void>;
+  resetLevelConfig: () => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -67,35 +77,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
       approved: false,
     };
 
-    const updated: AppData = {
-      ...data,
-      completions: [...data.completions, completion],
-    };
-    await get()._save(updated);
+    await get()._save({ ...data, completions: [...data.completions, completion] });
   },
 
   approveCompletion: async (completionId) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
+    await get()._save({
       ...data,
       completions: data.completions.map((c) =>
         c.id === completionId
           ? { ...c, approved: true, approvedAt: new Date().toISOString() }
           : c
       ),
-    };
-    await get()._save(updated);
+    });
   },
 
   rejectCompletion: async (completionId) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
+    await get()._save({
       ...data,
       completions: data.completions.filter((c) => c.id !== completionId),
-    };
-    await get()._save(updated);
+    });
   },
 
   redeemReward: async (rewardId, childId) => {
@@ -112,17 +116,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
       cost: reward.cost,
     };
 
-    const updated: AppData = {
-      ...data,
-      redemptions: [...data.redemptions, redemption],
-    };
-    await get()._save(updated);
+    await get()._save({ ...data, redemptions: [...data.redemptions, redemption] });
   },
 
   updateChild: async (childId, updates) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
+    await get()._save({
       ...data,
       settings: {
         ...data.settings,
@@ -130,88 +130,103 @@ export const useAppStore = create<AppStore>((set, get) => ({
           c.id === childId ? { ...c, ...updates } : c
         ),
       },
-    };
-    await get()._save(updated);
+    });
+  },
+
+  addHouseholdMember: async (member) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      settings: {
+        ...data.settings,
+        children: [...data.settings.children, { ...member, id: uuidv4() }],
+      },
+    });
+  },
+
+  removeHouseholdMember: async (memberId) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      settings: {
+        ...data.settings,
+        children: data.settings.children.filter((c) => c.id !== memberId),
+      },
+    });
   },
 
   addChore: async (chore) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
-      ...data,
-      chores: [...data.chores, { ...chore, id: uuidv4() }],
-    };
-    await get()._save(updated);
+    await get()._save({ ...data, chores: [...data.chores, { ...chore, id: uuidv4() }] });
   },
 
   updateChore: async (choreId, updates) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
+    await get()._save({
       ...data,
-      chores: data.chores.map((c) =>
-        c.id === choreId ? { ...c, ...updates } : c
-      ),
-    };
-    await get()._save(updated);
+      chores: data.chores.map((c) => (c.id === choreId ? { ...c, ...updates } : c)),
+    });
   },
 
   deleteChore: async (choreId) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
-      ...data,
-      chores: data.chores.filter((c) => c.id !== choreId),
-    };
-    await get()._save(updated);
+    await get()._save({ ...data, chores: data.chores.filter((c) => c.id !== choreId) });
   },
 
   addReward: async (reward) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
-      ...data,
-      rewards: [...data.rewards, { ...reward, id: uuidv4() }],
-    };
-    await get()._save(updated);
+    await get()._save({ ...data, rewards: [...data.rewards, { ...reward, id: uuidv4() }] });
   },
 
   updateReward: async (rewardId, updates) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
+    await get()._save({
       ...data,
-      rewards: data.rewards.map((r) =>
-        r.id === rewardId ? { ...r, ...updates } : r
-      ),
-    };
-    await get()._save(updated);
+      rewards: data.rewards.map((r) => (r.id === rewardId ? { ...r, ...updates } : r)),
+    });
   },
 
   deleteReward: async (rewardId) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
-      ...data,
-      rewards: data.rewards.filter((r) => r.id !== rewardId),
-    };
-    await get()._save(updated);
+    await get()._save({ ...data, rewards: data.rewards.filter((r) => r.id !== rewardId) });
   },
 
   updateNextOurWeekend: async (date) => {
     const { data } = get();
     if (!data) return;
-    const updated: AppData = {
+    await get()._save({
       ...data,
       settings: {
         ...data.settings,
         custodySchedule: { nextOurWeekend: date },
       },
-    };
-    await get()._save(updated);
+    });
   },
 
-  // Internal save helper
+  updateLevelConfig: async (config) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      settings: { ...data.settings, levelConfig: config },
+    });
+  },
+
+  resetLevelConfig: async () => {
+    const { data } = get();
+    if (!data) return;
+    const { levelConfig: _removed, ...settingsWithoutConfig } = data.settings;
+    await get()._save({ ...data, settings: settingsWithoutConfig });
+  },
+
   _save: async (updated: AppData) => {
     set({ saving: true, data: updated });
     try {

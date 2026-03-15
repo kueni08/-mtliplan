@@ -35,8 +35,8 @@ export default function Navigation({ children }: NavigationProps) {
             <span className="text-xs">Übersicht</span>
           </Link>
 
-          {/* Child tabs */}
-          {children.map((child) => (
+          {/* Child tabs — only show members with role "child" */}
+          {children.filter((c) => c.role === "child" || !c.role).map((child) => (
             <Link
               key={child.id}
               href={`/kind/${child.id}`}

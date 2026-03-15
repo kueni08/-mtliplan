@@ -27,6 +27,21 @@ async function findFileId(accessToken: string): Promise<string | null> {
   return (data.files?.[0]?.id as string) ?? null;
 }
 
+/** Migrate older data structures to current schema */
+function migrateData(raw: AppData): AppData {
+  return {
+    ...raw,
+    settings: {
+      ...raw.settings,
+      // Ensure all household members have a role (backward compat)
+      children: (raw.settings.children ?? []).map((c) => ({
+        ...c,
+        role: c.role ?? "child",
+      })),
+    },
+  };
+}
+
 export async function readAppData(): Promise<AppData> {
   const token = await getAccessToken();
   const fileId = await findFileId(token);
@@ -48,7 +63,7 @@ export async function readAppData(): Promise<AppData> {
   }
 
   const data = await res.json();
-  return data as AppData;
+  return migrateData(data as AppData);
 }
 
 export async function writeAppData(data: AppData): Promise<void> {
@@ -58,15 +73,9 @@ export async function writeAppData(data: AppData): Promise<void> {
 
   if (!fileId) {
     // Create new file in Drive root
-    const metadata = JSON.stringify({
-      name: FILENAME,
-    });
-
+    const metadata = JSON.stringify({ name: FILENAME });
     const form = new FormData();
-    form.append(
-      "metadata",
-      new Blob([metadata], { type: "application/json" })
-    );
+    form.append("metadata", new Blob([metadata], { type: "application/json" }));
     form.append("file", new Blob([body], { type: "application/json" }));
 
     const res = await fetch(

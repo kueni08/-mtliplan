@@ -1,8 +1,24 @@
-export interface Child {
+export type MemberRole = "child" | "adult";
+export type MemberColor = "purple" | "orange";
+
+export interface HouseholdMember {
   id: string;
   name: string;
-  avatar: string; // emoji
-  color: "purple" | "orange"; // theme color
+  avatar: string;
+  color: MemberColor;
+  role: MemberRole;
+  characterTheme?: "evoli" | "shire";
+  email?: string; // optional, for adult members
+}
+
+// Keep Child as alias for backward compatibility
+export type Child = HouseholdMember;
+
+export interface LevelConfig {
+  level: number;
+  minXP: number;
+  label: string;
+  emoji: string;
 }
 
 export interface Chore {
@@ -46,8 +62,9 @@ export interface CustodySchedule {
 }
 
 export interface AppSettings {
-  children: Child[];
+  children: HouseholdMember[];
   custodySchedule: CustodySchedule;
+  levelConfig?: LevelConfig[]; // custom level thresholds; uses defaults if missing
 }
 
 export interface AppData {
@@ -61,10 +78,10 @@ export interface AppData {
 
 // Derived / computed types
 export interface ChildStats {
-  child: Child;
-  totalXP: number; // all approved XP ever earned
-  spentXP: number; // XP spent on rewards
-  availableXP: number; // totalXP - spentXP
+  child: HouseholdMember;
+  totalXP: number;
+  spentXP: number;
+  availableXP: number;
   level: number;
   levelEmoji: string;
   xpInCurrentLevel: number;

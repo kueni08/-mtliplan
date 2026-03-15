@@ -2,7 +2,6 @@ import type { AppData } from "./types";
 import { v4 as uuidv4 } from "uuid";
 
 export function getDefaultData(): AppData {
-  // Next Friday from today as default custody weekend placeholder
   const nextFriday = getNextFriday();
 
   return {
@@ -11,92 +10,38 @@ export function getDefaultData(): AppData {
       children: [
         {
           id: "child-1",
-          name: "Kind 1",
-          avatar: "🦸",
+          name: "Nils",
+          avatar: "🦊",
           color: "purple",
+          role: "child",
+          characterTheme: "evoli" as const,
         },
         {
           id: "child-2",
-          name: "Kind 2",
-          avatar: "🧙",
+          name: "Lou",
+          avatar: "🐴",
           color: "orange",
+          role: "child",
+          characterTheme: "shire" as const,
         },
       ],
       custodySchedule: {
         nextOurWeekend: nextFriday,
       },
+      // levelConfig omitted → uses DEFAULT_LEVELS from gamification.ts
     },
     chores: [
-      {
-        id: uuidv4(),
-        title: "Tisch decken",
-        xp: 10,
-        category: "küche",
-        emoji: "🍽️",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Abwasch machen",
-        xp: 15,
-        category: "küche",
-        emoji: "🫧",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Zimmer aufräumen",
-        xp: 20,
-        category: "zimmer",
-        emoji: "🛏️",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Müll rausbringen",
-        xp: 15,
-        category: "haus",
-        emoji: "🗑️",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Staubsaugen",
-        xp: 25,
-        category: "haus",
-        emoji: "🧹",
-        active: false,
-      },
+      { id: uuidv4(), title: "Tisch decken",    xp: 10, category: "küche",   emoji: "🍽️", active: true },
+      { id: uuidv4(), title: "Abwasch machen",  xp: 15, category: "küche",   emoji: "🫧",  active: true },
+      { id: uuidv4(), title: "Zimmer aufräumen",xp: 20, category: "zimmer",  emoji: "🛏️", active: true },
+      { id: uuidv4(), title: "Müll rausbringen",xp: 15, category: "haus",    emoji: "🗑️", active: true },
+      { id: uuidv4(), title: "Staubsaugen",     xp: 25, category: "haus",    emoji: "🧹", active: false },
     ],
     rewards: [
-      {
-        id: uuidv4(),
-        title: "Wunsch-Film-Abend",
-        cost: 80,
-        emoji: "🎬",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Lieblings-Essen",
-        cost: 100,
-        emoji: "🍕",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Ausschlafen (ohne Aufstehzeit)",
-        cost: 120,
-        emoji: "😴",
-        active: true,
-      },
-      {
-        id: uuidv4(),
-        title: "Spielzeit +1 Stunde",
-        cost: 60,
-        emoji: "🎮",
-        active: true,
-      },
+      { id: uuidv4(), title: "Wunsch-Film-Abend",          cost: 80,  emoji: "🎬", active: true },
+      { id: uuidv4(), title: "Lieblings-Essen",             cost: 100, emoji: "🍕", active: true },
+      { id: uuidv4(), title: "Ausschlafen (ohne Aufstehzeit)", cost: 120, emoji: "😴", active: true },
+      { id: uuidv4(), title: "Spielzeit +1 Stunde",         cost: 60,  emoji: "🎮", active: true },
     ],
     completions: [],
     redemptions: [],
