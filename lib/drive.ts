@@ -6,10 +6,8 @@ import { getDefaultData } from "./defaultData";
 
 const FILENAME = "amtliplan-data.json";
 
-/** Get an access token from the household refresh token stored in env */
-async function getHouseholdAccessToken(): Promise<string> {
-  const rt = process.env.HOUSEHOLD_REFRESH_TOKEN;
-  if (!rt) throw new Error("HOUSEHOLD_REFRESH_TOKEN nicht konfiguriert");
+/** Exchange any Google refresh token for a short-lived access token. */
+async function exchangeRefreshToken(refreshToken: string): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -17,22 +15,31 @@ async function getHouseholdAccessToken(): Promise<string> {
       client_id: process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
       grant_type: "refresh_token",
-      refresh_token: rt,
+      refresh_token: refreshToken,
     }),
     cache: "no-store",
   });
-  if (!res.ok) throw new Error("Haushalt-Token ungültig");
+  if (!res.ok) throw new Error("Token-Austausch fehlgeschlagen");
   const { access_token } = await res.json();
   return access_token as string;
 }
 
 async function getAccessToken(): Promise<string> {
   const session = await auth();
+
+  // Admin session: use their personal access token
   if (session?.accessToken) return session.accessToken;
-  // Child sessions don't have an accessToken – fall back to household token
-  if (process.env.HOUSEHOLD_REFRESH_TOKEN) {
-    return getHouseholdAccessToken();
+
+  // Child session: use the household refresh token stored in the JWT
+  if (session?.householdRefreshToken) {
+    return exchangeRefreshToken(session.householdRefreshToken);
   }
+
+  // Backward compat: env var (single-household deployments)
+  if (process.env.HOUSEHOLD_REFRESH_TOKEN) {
+    return exchangeRefreshToken(process.env.HOUSEHOLD_REFRESH_TOKEN);
+  }
+
   throw new Error("Nicht angemeldet");
 }
 

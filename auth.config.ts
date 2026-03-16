@@ -39,10 +39,11 @@ export const authConfig: NextAuthConfig = {
       return token;
     },
     async session({ session, token }) {
-      session.accessToken  = token.accessToken  as string | undefined;
-      session.refreshToken = token.refreshToken as string | undefined;
-      session.role         = token.role         as "admin" | "child" | undefined;
-      session.childId      = token.childId      as string | undefined;
+      session.accessToken           = token.accessToken           as string | undefined;
+      session.refreshToken          = token.refreshToken          as string | undefined;
+      session.role                  = token.role                  as "admin" | "child" | undefined;
+      session.childId               = token.childId               as string | undefined;
+      session.householdRefreshToken = token.householdRefreshToken as string | undefined;
       return session;
     },
   },
