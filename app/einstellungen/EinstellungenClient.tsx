@@ -43,6 +43,9 @@ function EinstellungenContent() {
   } = useAppStore();
 
   const [tab, setTab]                 = useState<Tab>("haushalt");
+  const [householdCode, setHouseholdCode] = useState<string | null>(null);
+  const [fetchingCode, setFetchingCode]   = useState(false);
+  const [codeCopied, setCodeCopied]       = useState(false);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [editingChore,  setEditingChore]  = useState<string | null>(null);
@@ -219,17 +222,63 @@ function EinstellungenContent() {
             </button>
           )}
 
-          {/* Household token setup */}
-          <div className="glass rounded-2xl p-4 space-y-2 border border-yellow-500/20">
+          {/* Household code generator */}
+          <div className="glass rounded-2xl p-4 space-y-3 border border-purple-500/20">
             <h3 className="text-white/70 text-xs font-semibold uppercase tracking-wider">🔑 Kind-Login einrichten</h3>
             <p className="text-white/50 text-xs">
-              Damit Kinder sich ohne Google-Konto einloggen können, muss einmalig der Haushalt-Token in Vercel gesetzt werden.
+              Generiere einen Haushalt-Code und gib ihn den Kindern. Sie müssen ihn einmal auf ihrem Gerät eingeben –
+              danach reicht Name + Passwort. Kein Vercel-Zugriff nötig!
             </p>
             <ol className="text-white/50 text-xs space-y-1 list-decimal list-inside">
-              <li>Öffne <a href="/api/household-token" target="_blank" className="text-purple-300 underline">/api/household-token</a> und kopiere den Token</li>
-              <li>Füge ihn in Vercel → Settings → Environment Variables als <code className="bg-white/10 px-1 rounded">HOUSEHOLD_REFRESH_TOKEN</code> ein</li>
-              <li>Setze für jedes Kind ein Passwort (Bearbeiten → Passwort setzen)</li>
+              <li>Code generieren und kopieren</li>
+              <li>Auf dem Gerät des Kindes die App öffnen → Code einfügen</li>
+              <li>Passwort für das Kind setzen (Bearbeiten → Passwort setzen)</li>
             </ol>
+            {householdCode ? (
+              <div className="space-y-2">
+                <textarea
+                  readOnly
+                  value={householdCode}
+                  rows={3}
+                  className="w-full bg-white/5 border border-purple-500/20 rounded-xl px-3 py-2 text-purple-200 text-xs font-mono resize-none"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(householdCode);
+                      setCodeCopied(true);
+                      setTimeout(() => setCodeCopied(false), 2000);
+                    }}
+                    className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-xs py-2 px-3 rounded-xl transition-colors"
+                  >
+                    {codeCopied ? "✓ Kopiert!" : "📋 Kopieren"}
+                  </button>
+                  <button
+                    onClick={() => setHouseholdCode(null)}
+                    className="text-white/30 hover:text-white/60 text-xs px-3 py-2 transition-colors"
+                  >
+                    schliessen
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={async () => {
+                  setFetchingCode(true);
+                  try {
+                    const res = await fetch("/api/household-code");
+                    const json = await res.json();
+                    if (json.householdCode) setHouseholdCode(json.householdCode);
+                  } finally {
+                    setFetchingCode(false);
+                  }
+                }}
+                disabled={fetchingCode}
+                className="w-full bg-purple-600/50 hover:bg-purple-600 disabled:opacity-50 text-white text-sm py-2 px-4 rounded-xl transition-colors"
+              >
+                {fetchingCode ? "Generiere…" : "🔑 Haushalt-Code generieren"}
+              </button>
+            )}
           </div>
         </div>
       )}

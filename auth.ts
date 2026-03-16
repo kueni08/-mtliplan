@@ -3,6 +3,28 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 import { readAppDataWithToken } from "@/lib/drive";
+import { decryptHouseholdToken } from "@/lib/householdToken";
+
+/** Exchange a Google refresh token for a short-lived access token. */
+async function getAccessTokenFromRefreshToken(refreshToken: string): Promise<string> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Token-Austausch fehlgeschlagen: ${err}`);
+  }
+  const { access_token } = await res.json();
+  return access_token as string;
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
@@ -12,36 +34,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       id: "credentials",
       name: "Kind-Login",
       credentials: {
-        username: { label: "Benutzername", type: "text" },
-        password: { label: "Passwort", type: "password" },
+        username:      { label: "Benutzername",   type: "text" },
+        password:      { label: "Passwort",       type: "password" },
+        householdCode: { label: "Haushalt-Code",  type: "text" },
       },
       async authorize(credentials) {
-        const username = credentials?.username as string;
-        const password = credentials?.password as string;
+        const username      = credentials?.username      as string | undefined;
+        const password      = credentials?.password      as string | undefined;
+        const householdCode = credentials?.householdCode as string | undefined;
+
         if (!username || !password) return null;
 
-        const rt = process.env.HOUSEHOLD_REFRESH_TOKEN;
-        if (!rt) throw new Error("HOUSEHOLD_REFRESH_TOKEN nicht konfiguriert. Bitte Admin kontaktieren.");
+        // Resolve the household refresh token:
+        // 1. From the encrypted household code (multi-tenant, preferred)
+        // 2. From the HOUSEHOLD_REFRESH_TOKEN env var (backward compat)
+        let householdRefreshToken: string | null = null;
 
-        // Get access token from refresh token
-        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: process.env.GOOGLE_CLIENT_ID!,
-            client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-            grant_type: "refresh_token",
-            refresh_token: rt,
-          }),
-        });
-        if (!tokenRes.ok) throw new Error("Haushalt-Token ungültig. Bitte Admin kontaktieren.");
-        const { access_token } = await tokenRes.json();
+        if (householdCode) {
+          householdRefreshToken = decryptHouseholdToken(householdCode);
+          if (!householdRefreshToken) {
+            throw new Error("Ungültiger Haushalt-Code. Bitte Admin um einen neuen Code bitten.");
+          }
+        }
 
-        // Read AppData using admin's access token
-        const appData = await readAppDataWithToken(access_token);
+        if (!householdRefreshToken) {
+          householdRefreshToken = process.env.HOUSEHOLD_REFRESH_TOKEN ?? null;
+        }
+
+        if (!householdRefreshToken) {
+          throw new Error(
+            "Kein Haushalt-Code hinterlegt. Bitte den Admin-Haushalt-Code eingeben."
+          );
+        }
+
+        // Exchange refresh token for access token
+        const accessToken = await getAccessTokenFromRefreshToken(householdRefreshToken);
+
+        // Read household data from Drive
+        const appData = await readAppDataWithToken(accessToken);
         if (!appData) throw new Error("Haushaltsdaten konnten nicht geladen werden.");
 
-        // Find member by name (case-insensitive)
+        // Find child by name (case-insensitive)
         const member = appData.settings.children.find(
           (c) => c.name.toLowerCase() === username.toLowerCase()
         );
@@ -56,6 +89,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: member.email ?? `${member.id}@household.local`,
           role: "child" as const,
           childId: member.id,
+          // Store the household refresh token so Drive works during child sessions
+          householdRefreshToken,
         };
       },
     }),
@@ -63,7 +98,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   callbacks: {
     ...authConfig.callbacks,
     async jwt({ token, account, user }) {
-      // Google OAuth first login
+      // Google OAuth first login → admin session
       if (account?.provider === "google") {
         return {
           ...token,
@@ -76,24 +111,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Credentials login (child) — user is set, account is null
       if (user && !account) {
-        const u = user as typeof user & { role?: string; childId?: string };
+        const u = user as typeof user & {
+          role?: string;
+          childId?: string;
+          householdRefreshToken?: string;
+        };
         return {
           ...token,
           role: "child" as const,
           childId: u.childId ?? u.id,
-          // No accessToken for child – drive.ts uses HOUSEHOLD_REFRESH_TOKEN
+          householdRefreshToken: u.householdRefreshToken,
+          // No accessToken for child – Drive uses householdRefreshToken
         };
       }
 
-      // Child session – no token refresh needed (uses env var)
+      // Child session subsequent calls – no token refresh needed
       if (token.role === "child") return token;
 
-      // Token still valid (with 60s buffer)
+      // Admin token still valid (60s buffer)
       if (token.expiresAt && Date.now() < (token.expiresAt as number) * 1000 - 60_000) {
         return token;
       }
 
-      // Token expired – try to refresh
+      // Admin token expired – try to refresh
       if (!token.refreshToken) return { ...token, error: "RefreshTokenMissing" };
 
       try {

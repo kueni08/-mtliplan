@@ -6,6 +6,8 @@ declare module "next-auth" {
     refreshToken?: string;
     role?: "admin" | "child";
     childId?: string;
+    /** Encrypted household refresh token stored in child sessions for Drive access */
+    householdRefreshToken?: string;
     user: {
       id: string;
     } & DefaultSession["user"];
@@ -19,5 +21,7 @@ declare module "next-auth/jwt" {
     expiresAt?: number;
     role?: "admin" | "child";
     childId?: string;
+    /** Encrypted household refresh token stored in child sessions for Drive access */
+    householdRefreshToken?: string;
   }
 }
