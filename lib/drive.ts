@@ -1,8 +1,10 @@
 "use server";
 
 import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 import type { AppData } from "./types";
 import { getDefaultData } from "./defaultData";
+import { migrateData } from "./driveUtils";
 
 const FILENAME = "amtliplan-data.json";
 
@@ -27,8 +29,25 @@ async function exchangeRefreshToken(refreshToken: string): Promise<string> {
 async function getAccessToken(): Promise<string> {
   const session = await auth();
 
-  // Admin session: use their personal access token
-  if (session?.accessToken) return session.accessToken;
+  // Admin session: use access token if still valid, otherwise refresh proactively
+  if (session?.accessToken) {
+    const expired =
+      session.expiresAt != null &&
+      Date.now() > (session.expiresAt * 1000) - 60_000;
+
+    if (!expired) return session.accessToken;
+
+    // Access token expired – use refresh token to get a new one
+    if (session.refreshToken) {
+      return exchangeRefreshToken(session.refreshToken);
+    }
+    // No refresh token (shouldn't happen for Google OAuth) – fall through
+  }
+
+  // Admin with no access token but with refresh token
+  if (session?.refreshToken && !session.householdRefreshToken) {
+    return exchangeRefreshToken(session.refreshToken);
+  }
 
   // Child session: use the household refresh token stored in the JWT
   if (session?.householdRefreshToken) {
@@ -56,35 +75,13 @@ async function findFileId(accessToken: string): Promise<string | null> {
   return (data.files?.[0]?.id as string) ?? null;
 }
 
-/** Migrate older data structures to current schema */
-function migrateData(raw: AppData): AppData {
-  return {
-    ...raw,
-    assignments: raw.assignments ?? [],
-    settings: {
-      ...raw.settings,
-      children: (raw.settings.children ?? []).map((c) => ({
-        ...c,
-        role: c.role ?? "child",
-      })),
-    },
-  };
-}
-
-/** Read AppData using a specific access token (used in auth.ts CredentialsProvider) */
-export async function readAppDataWithToken(accessToken: string): Promise<AppData> {
-  const fileId = await findFileId(accessToken);
-  if (!fileId) return getDefaultData();
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-    { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
-  );
-  if (!res.ok) return getDefaultData();
-  return migrateData((await res.json()) as AppData);
-}
-
 export async function readAppData(): Promise<AppData> {
-  const token = await getAccessToken();
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch {
+    redirect("/");
+  }
   const fileId = await findFileId(token);
 
   if (!fileId) {
@@ -108,7 +105,12 @@ export async function readAppData(): Promise<AppData> {
 }
 
 export async function writeAppData(data: AppData): Promise<void> {
-  const token = await getAccessToken();
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch {
+    redirect("/");
+  }
   const fileId = await findFileId(token);
   const body = JSON.stringify(data);
 

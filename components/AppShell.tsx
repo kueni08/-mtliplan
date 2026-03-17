@@ -12,10 +12,10 @@ export default function AppShell({ children }: AppShellProps) {
   const { data, loading, error, loadData } = useAppStore();
 
   useEffect(() => {
-    if (!data && !loading) {
+    if (!data && !loading && !error) {
       loadData();
     }
-  }, [data, loading, loadData]);
+  }, [data, loading, error, loadData]);
 
   if (error && !loading && !data) {
     return (
