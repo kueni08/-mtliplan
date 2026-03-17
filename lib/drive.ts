@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 import type { AppData } from "./types";
 import { getDefaultData } from "./defaultData";
 import { migrateData } from "./driveUtils";
@@ -75,7 +76,12 @@ async function findFileId(accessToken: string): Promise<string | null> {
 }
 
 export async function readAppData(): Promise<AppData> {
-  const token = await getAccessToken();
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch {
+    redirect("/");
+  }
   const fileId = await findFileId(token);
 
   if (!fileId) {
@@ -99,7 +105,12 @@ export async function readAppData(): Promise<AppData> {
 }
 
 export async function writeAppData(data: AppData): Promise<void> {
-  const token = await getAccessToken();
+  let token: string;
+  try {
+    token = await getAccessToken();
+  } catch {
+    redirect("/");
+  }
   const fileId = await findFileId(token);
   const body = JSON.stringify(data);
 
