@@ -11,16 +11,18 @@ export default function ChildLoginForm() {
   const [password, setPassword]           = useState("");
   const [householdCode, setHouseholdCode] = useState("");
   const [codeInput, setCodeInput]         = useState("");
-  const [showCodeSetup, setShowCodeSetup] = useState(false);
+  // null = not yet checked localStorage (SSR/hydration), true/false = result
+  const [showCodeSetup, setShowCodeSetup] = useState<boolean | null>(null);
   const [error, setError]                 = useState<string | null>(null);
   const [loading, setLoading]             = useState(false);
   const router = useRouter();
 
-  // Load stored household code from localStorage on mount
+  // Load stored household code from localStorage on mount (client-side only)
   useEffect(() => {
     const stored = localStorage.getItem(LS_KEY);
     if (stored) {
       setHouseholdCode(stored);
+      setShowCodeSetup(false);
     } else {
       setShowCodeSetup(true);
     }
@@ -71,6 +73,11 @@ export default function ChildLoginForm() {
       setLoading(false);
     }
   };
+
+  // Still determining whether household code exists (avoid SSR flash)
+  if (showCodeSetup === null) {
+    return <div className="h-32" />;
+  }
 
   return (
     <div className="space-y-4">

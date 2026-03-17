@@ -27,8 +27,25 @@ async function exchangeRefreshToken(refreshToken: string): Promise<string> {
 async function getAccessToken(): Promise<string> {
   const session = await auth();
 
-  // Admin session: use their personal access token
-  if (session?.accessToken) return session.accessToken;
+  // Admin session: use access token if still valid, otherwise refresh proactively
+  if (session?.accessToken) {
+    const expired =
+      session.expiresAt != null &&
+      Date.now() > (session.expiresAt * 1000) - 60_000;
+
+    if (!expired) return session.accessToken;
+
+    // Access token expired – use refresh token to get a new one
+    if (session.refreshToken) {
+      return exchangeRefreshToken(session.refreshToken);
+    }
+    // No refresh token (shouldn't happen for Google OAuth) – fall through
+  }
+
+  // Admin with no access token but with refresh token
+  if (session?.refreshToken && !session.householdRefreshToken) {
+    return exchangeRefreshToken(session.refreshToken);
+  }
 
   // Child session: use the household refresh token stored in the JWT
   if (session?.householdRefreshToken) {
