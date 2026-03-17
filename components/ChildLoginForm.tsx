@@ -15,6 +15,7 @@ export default function ChildLoginForm() {
   const [showCodeSetup, setShowCodeSetup] = useState<boolean | null>(null);
   const [error, setError]                 = useState<string | null>(null);
   const [loading, setLoading]             = useState(false);
+  const [failCount, setFailCount]         = useState(0);
   const router = useRouter();
 
   // Load stored household code from localStorage on mount (client-side only)
@@ -58,14 +59,15 @@ export default function ChildLoginForm() {
         redirect: false,
       });
       if (result?.error) {
-        // Show the actual error from authorize() if available
-        const msg = result.error === "CredentialsSignin"
-          ? "Benutzername oder Passwort falsch."
-          : result.error;
-        setError(msg);
+        const newCount = failCount + 1;
+        setFailCount(newCount);
+        setError(
+          newCount >= 2
+            ? "Anmeldung fehlgeschlagen. Falls Name und Passwort stimmen, könnte der Haushalt-Code ungültig sein — bitte neu eingeben."
+            : "Benutzername oder Passwort falsch."
+        );
       } else {
         router.push("/kind/me");
-        router.refresh();
       }
     } catch {
       setError("Ein Fehler ist aufgetreten. Bitte nochmals versuchen.");
@@ -108,14 +110,24 @@ export default function ChildLoginForm() {
           </button>
         </div>
       ) : (
-        <div className="flex items-center justify-between bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
-          <span className="text-green-400 text-xs">✓ Haushalt verbunden</span>
+        <div className={`flex items-center justify-between rounded-xl px-3 py-2 ${
+          failCount >= 2
+            ? "bg-yellow-500/10 border border-yellow-500/30"
+            : "bg-green-500/10 border border-green-500/20"
+        }`}>
+          <span className={`text-xs ${failCount >= 2 ? "text-yellow-300" : "text-green-400"}`}>
+            {failCount >= 2 ? "⚠️ Haushalt-Code evtl. abgelaufen" : "✓ Haushalt verbunden"}
+          </span>
           <button
             type="button"
             onClick={resetCode}
-            className="text-white/30 hover:text-white/60 text-xs transition-colors"
+            className={`text-xs transition-colors ${
+              failCount >= 2
+                ? "text-yellow-300 hover:text-yellow-100 underline"
+                : "text-white/30 hover:text-white/60"
+            }`}
           >
-            ändern
+            {failCount >= 2 ? "Neu eingeben" : "ändern"}
           </button>
         </div>
       )}

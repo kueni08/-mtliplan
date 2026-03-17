@@ -46,6 +46,7 @@ function EinstellungenContent() {
   const [householdCode, setHouseholdCode] = useState<string | null>(null);
   const [fetchingCode, setFetchingCode]   = useState(false);
   const [codeCopied, setCodeCopied]       = useState(false);
+  const [codeError, setCodeError]         = useState<string | null>(null);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [editingChore,  setEditingChore]  = useState<string | null>(null);
@@ -262,13 +263,30 @@ function EinstellungenContent() {
                 </div>
               </div>
             ) : (
+              <>
+              {codeError && (
+                <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">
+                  {codeError}
+                </p>
+              )}
               <button
                 onClick={async () => {
                   setFetchingCode(true);
+                  setCodeError(null);
                   try {
                     const res = await fetch("/api/household-code");
                     const json = await res.json();
-                    if (json.householdCode) setHouseholdCode(json.householdCode);
+                    if (json.householdCode) {
+                      setHouseholdCode(json.householdCode);
+                    } else {
+                      setCodeError(
+                        json.error === "Nur für Admin zugänglich"
+                          ? "Deine Sitzung hat kein Zugriffstoken. Bitte einmal ab- und wieder anmelden."
+                          : (json.error ?? "Code konnte nicht generiert werden.")
+                      );
+                    }
+                  } catch {
+                    setCodeError("Netzwerkfehler. Bitte nochmals versuchen.");
                   } finally {
                     setFetchingCode(false);
                   }
@@ -278,6 +296,7 @@ function EinstellungenContent() {
               >
                 {fetchingCode ? "Generiere…" : "🔑 Haushalt-Code generieren"}
               </button>
+              </>
             )}
           </div>
         </div>

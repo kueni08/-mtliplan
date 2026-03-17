@@ -1,6 +1,14 @@
 import { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
+  interface User {
+    role?: "admin" | "child";
+    childId?: string;
+    householdRefreshToken?: string;
+    accessToken?: string;
+    accessTokenExpiry?: number;
+  }
+
   interface Session {
     accessToken?: string;
     refreshToken?: string;

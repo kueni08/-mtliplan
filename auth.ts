@@ -90,8 +90,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: member.email ?? `${member.id}@household.local`,
           role: "child" as const,
           childId: member.id,
-          // Store the household refresh token so Drive works during child sessions
           householdRefreshToken,
+          // Cache the freshly-obtained access token so Drive calls don't need
+          // to re-exchange the refresh token on every server action (valid 1h)
+          accessToken,
+          accessTokenExpiry: Math.floor(Date.now() / 1000) + 3600,
         };
       },
     }),
@@ -112,17 +115,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       // Credentials login (child) — user is set, account is null
       if (user && !account) {
-        const u = user as typeof user & {
-          role?: string;
-          childId?: string;
-          householdRefreshToken?: string;
-        };
         return {
           ...token,
           role: "child" as const,
-          childId: u.childId ?? u.id,
-          householdRefreshToken: u.householdRefreshToken,
-          // No accessToken for child – Drive uses householdRefreshToken
+          childId: user.childId ?? user.id,
+          householdRefreshToken: user.householdRefreshToken,
+          // Cache the access token obtained during login; Drive will reuse it
+          // until it expires (~1h), then fall back to exchanging householdRefreshToken
+          accessToken: user.accessToken,
+          expiresAt: user.accessTokenExpiry,
         };
       }
 

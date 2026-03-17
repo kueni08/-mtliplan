@@ -26,7 +26,8 @@ async function findFileId(accessToken: string): Promise<string | null> {
       cache: "no-store",
     }
   );
-  if (!res.ok) return null;
+  // Throw on auth/server errors so callers get a real error instead of empty data
+  if (!res.ok) throw new Error(`Drive API Fehler: ${res.status}`);
   const data = await res.json();
   return (data.files?.[0]?.id as string) ?? null;
 }
