@@ -3,6 +3,7 @@
 import { auth } from "@/auth";
 import type { AppData } from "./types";
 import { getDefaultData } from "./defaultData";
+import { migrateData } from "./driveUtils";
 
 const FILENAME = "amtliplan-data.json";
 
@@ -71,33 +72,6 @@ async function findFileId(accessToken: string): Promise<string | null> {
   if (!res.ok) return null;
   const data = await res.json();
   return (data.files?.[0]?.id as string) ?? null;
-}
-
-/** Migrate older data structures to current schema */
-function migrateData(raw: AppData): AppData {
-  return {
-    ...raw,
-    assignments: raw.assignments ?? [],
-    settings: {
-      ...raw.settings,
-      children: (raw.settings.children ?? []).map((c) => ({
-        ...c,
-        role: c.role ?? "child",
-      })),
-    },
-  };
-}
-
-/** Read AppData using a specific access token (used in auth.ts CredentialsProvider) */
-export async function readAppDataWithToken(accessToken: string): Promise<AppData> {
-  const fileId = await findFileId(accessToken);
-  if (!fileId) return getDefaultData();
-  const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-    { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store" }
-  );
-  if (!res.ok) return getDefaultData();
-  return migrateData((await res.json()) as AppData);
 }
 
 export async function readAppData(): Promise<AppData> {

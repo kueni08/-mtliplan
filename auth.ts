@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
-import { readAppDataWithToken } from "@/lib/drive";
+import { readAppDataWithToken } from "@/lib/driveUtils";
 import { decryptHouseholdToken } from "@/lib/householdToken";
 
 /** Exchange a Google refresh token for a short-lived access token. */
