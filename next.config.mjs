@@ -9,6 +9,8 @@ const withPWA = withPWAInit({
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
+    // Inline Workbox runtime into sw.js to avoid importScripts redirect issues on Vercel
+    inlineWorkboxRuntime: true,
   },
 });
 
