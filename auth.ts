@@ -28,6 +28,7 @@ async function getAccessTokenFromRefreshToken(refreshToken: string): Promise<str
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  session: { maxAge: 24 * 60 * 60 }, // 24 hours
   providers: [
     ...authConfig.providers,
     Credentials({
