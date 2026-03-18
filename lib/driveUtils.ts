@@ -32,6 +32,19 @@ async function findFileId(accessToken: string): Promise<string | null> {
   return (data.files?.[0]?.id as string) ?? null;
 }
 
+/**
+ * Check whether the given access token can access the household Drive file.
+ * Used in auth.ts JWT callback to detect the admin (their Drive owns the file).
+ */
+export async function driveFileExists(accessToken: string): Promise<boolean> {
+  try {
+    const id = await findFileId(accessToken);
+    return id !== null;
+  } catch {
+    return false;
+  }
+}
+
 /** Read AppData using a specific access token (used in auth.ts CredentialsProvider) */
 export async function readAppDataWithToken(accessToken: string): Promise<AppData> {
   const fileId = await findFileId(accessToken);

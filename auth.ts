@@ -1,12 +1,9 @@
 import NextAuth from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
-import { readAppDataWithToken } from "@/lib/driveUtils";
-import { decryptHouseholdToken } from "@/lib/householdToken";
+import { readAppDataWithToken, driveFileExists } from "@/lib/driveUtils";
 
 /** Exchange a Google refresh token for a short-lived access token. */
-async function getAccessTokenFromRefreshToken(refreshToken: string): Promise<string> {
+async function exchangeRefreshToken(refreshToken: string): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -18,10 +15,7 @@ async function getAccessTokenFromRefreshToken(refreshToken: string): Promise<str
     }),
     cache: "no-store",
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Token-Austausch fehlgeschlagen: ${err}`);
-  }
+  if (!res.ok) throw new Error("Token-Austausch fehlgeschlagen");
   const { access_token } = await res.json();
   return access_token as string;
 }
@@ -29,113 +23,82 @@ async function getAccessTokenFromRefreshToken(refreshToken: string): Promise<str
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   session: { maxAge: 24 * 60 * 60 }, // 24 hours
-  providers: [
-    ...authConfig.providers,
-    Credentials({
-      id: "credentials",
-      name: "Kind-Login",
-      credentials: {
-        username:      { label: "Benutzername",   type: "text" },
-        password:      { label: "Passwort",       type: "password" },
-        householdCode: { label: "Haushalt-Code",  type: "text" },
-      },
-      async authorize(credentials) {
-        const username      = credentials?.username      as string | undefined;
-        const password      = credentials?.password      as string | undefined;
-        const householdCode = credentials?.householdCode as string | undefined;
-
-        if (!username || !password) return null;
-
-        // Resolve the household refresh token:
-        // 1. From the encrypted household code (multi-tenant, preferred)
-        // 2. From the HOUSEHOLD_REFRESH_TOKEN env var (backward compat)
-        let householdRefreshToken: string | null = null;
-
-        if (householdCode) {
-          householdRefreshToken = decryptHouseholdToken(householdCode);
-          if (!householdRefreshToken) {
-            throw new Error("Ungültiger Haushalt-Code. Bitte Admin um einen neuen Code bitten.");
-          }
-        }
-
-        if (!householdRefreshToken) {
-          householdRefreshToken = process.env.HOUSEHOLD_REFRESH_TOKEN ?? null;
-        }
-
-        if (!householdRefreshToken) {
-          throw new Error(
-            "Kein Haushalt-Code hinterlegt. Bitte den Admin-Haushalt-Code eingeben."
-          );
-        }
-
-        // Exchange refresh token for access token
-        const accessToken = await getAccessTokenFromRefreshToken(householdRefreshToken);
-
-        // Read household data from Drive
-        const appData = await readAppDataWithToken(accessToken);
-        if (!appData) throw new Error("Haushaltsdaten konnten nicht geladen werden.");
-
-        // Find child by name (case-insensitive)
-        const member = appData.settings.children.find(
-          (c) => c.name.toLowerCase() === username.toLowerCase()
-        );
-        if (!member || !member.passwordHash) return null;
-
-        const valid = await bcrypt.compare(password, member.passwordHash);
-        if (!valid) return null;
-
-        return {
-          id: member.id,
-          name: member.name,
-          email: member.email ?? `${member.id}@household.local`,
-          role: "child" as const,
-          childId: member.id,
-          householdRefreshToken,
-          // Cache the freshly-obtained access token so Drive calls don't need
-          // to re-exchange the refresh token on every server action (valid 1h)
-          accessToken,
-          accessTokenExpiry: Math.floor(Date.now() / 1000) + 3600,
-        };
-      },
-    }),
-  ],
   callbacks: {
     ...authConfig.callbacks,
     async jwt({ token, account, user }) {
-      // Google OAuth first login → admin session
+      // ── First login via Google OAuth ─────────────────────────────────────
       if (account?.provider === "google") {
+        const email = user.email ?? "";
+
+        // 1. Check if this Google account owns the Drive file → admin
+        if (account.access_token) {
+          const isAdmin = await driveFileExists(account.access_token);
+          if (isAdmin) {
+            return {
+              ...token,
+              accessToken:  account.access_token,
+              refreshToken: account.refresh_token,
+              expiresAt:    account.expires_at,
+              role:         "admin" as const,
+            };
+          }
+        }
+
+        // 2. Check if email is registered as a household member
+        const hhRefreshToken = process.env.HOUSEHOLD_REFRESH_TOKEN;
+        if (hhRefreshToken && email) {
+          try {
+            const hhAccessToken = await exchangeRefreshToken(hhRefreshToken);
+            const appData = await readAppDataWithToken(hhAccessToken);
+            const member = appData.settings.children.find(
+              (m) => m.email?.toLowerCase() === email.toLowerCase()
+            );
+            if (member) {
+              return {
+                ...token,
+                accessToken:          account.access_token,
+                expiresAt:            account.expires_at,
+                role:                 (member.role ?? "child") as "child" | "adult",
+                memberId:             member.id,
+                householdRefreshToken: hhRefreshToken,
+              };
+            }
+          } catch {
+            // Drive lookup failed – fall through to pending
+          }
+        }
+
+        // 3. No HOUSEHOLD_REFRESH_TOKEN set → fresh deployment, first user = admin
+        if (!hhRefreshToken) {
+          return {
+            ...token,
+            accessToken:  account.access_token,
+            refreshToken: account.refresh_token,
+            expiresAt:    account.expires_at,
+            role:         "admin" as const,
+          };
+        }
+
+        // 4. Email not registered → pending
         return {
           ...token,
-          accessToken: account.access_token,
-          refreshToken: account.refresh_token,
-          expiresAt: account.expires_at,
-          role: "admin" as const,
+          role:  "pending" as const,
+          email: email,
         };
       }
 
-      // Credentials login (child) — user is set, account is null
-      if (user && !account) {
-        return {
-          ...token,
-          role: "child" as const,
-          childId: user.childId ?? user.id,
-          householdRefreshToken: user.householdRefreshToken,
-          // Cache the access token obtained during login; Drive will reuse it
-          // until it expires (~1h), then fall back to exchanging householdRefreshToken
-          accessToken: user.accessToken,
-          expiresAt: user.accessTokenExpiry,
-        };
+      // ── Subsequent token calls (session refreshes) ───────────────────────
+      // Non-admin roles need no server-side token refresh
+      if (token.role === "child" || token.role === "adult" || token.role === "pending") {
+        return token;
       }
 
-      // Child session subsequent calls – no token refresh needed
-      if (token.role === "child") return token;
-
-      // Admin token still valid (60s buffer)
+      // Admin: return token if still valid (60s buffer)
       if (token.expiresAt && Date.now() < (token.expiresAt as number) * 1000 - 60_000) {
         return token;
       }
 
-      // Admin token expired – try to refresh
+      // Admin: access token expired – refresh via Google
       if (!token.refreshToken) return { ...token, error: "RefreshTokenMissing" };
 
       try {
@@ -143,9 +106,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
-            client_id: process.env.GOOGLE_CLIENT_ID!,
+            client_id:     process.env.GOOGLE_CLIENT_ID!,
             client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-            grant_type: "refresh_token",
+            grant_type:    "refresh_token",
             refresh_token: token.refreshToken as string,
           }),
         });
@@ -153,8 +116,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!response.ok) throw tokens;
         return {
           ...token,
-          accessToken: tokens.access_token,
-          expiresAt: Math.floor(Date.now() / 1000) + tokens.expires_in,
+          accessToken:  tokens.access_token,
+          expiresAt:    Math.floor(Date.now() / 1000) + tokens.expires_in,
           refreshToken: tokens.refresh_token ?? token.refreshToken,
         };
       } catch (error) {

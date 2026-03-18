@@ -13,19 +13,30 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
+  // Pending users can only access the pending page and auth endpoints
+  if (session?.role === "pending" && pathname !== "/pending") {
+    return NextResponse.redirect(new URL("/pending", req.url));
+  }
+
+  // Child role: restrict to their own profile page
   if (session?.role === "child") {
-    const childId = session.childId;
-    // Block admin-only pages
+    const memberId = session.memberId;
     if (pathname.startsWith("/einstellungen") || pathname.startsWith("/dashboard")) {
-      return NextResponse.redirect(new URL(`/kind/${childId}`, req.url));
+      return NextResponse.redirect(new URL(`/kind/${memberId}`, req.url));
     }
-    // Prevent child from viewing other children's profiles
     if (
       pathname.startsWith("/kind/") &&
-      !pathname.startsWith(`/kind/${childId}`) &&
+      !pathname.startsWith(`/kind/${memberId}`) &&
       pathname !== "/kind/me"
     ) {
-      return NextResponse.redirect(new URL(`/kind/${childId}`, req.url));
+      return NextResponse.redirect(new URL(`/kind/${memberId}`, req.url));
+    }
+  }
+
+  // Adult role: access to dashboard + kind pages, but not einstellungen
+  if (session?.role === "adult") {
+    if (pathname.startsWith("/einstellungen")) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
     }
   }
 
