@@ -13,9 +13,11 @@ import { CheckCircleIcon, XCircleIcon, ArrowRightIcon } from "@heroicons/react/2
 
 interface DashboardClientProps {
   userName: string;
+  role: "admin" | "adult" | "child" | "pending";
+  memberId?: string;
 }
 
-function DashboardContent({ userName }: DashboardClientProps) {
+function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
   const { data, approveCompletion, rejectCompletion } = useAppStore();
 
   if (!data) return null;
@@ -54,6 +56,21 @@ function DashboardContent({ userName }: DashboardClientProps) {
             </button>
           </div>
         </div>
+
+        {/* Adult: My Tasks card */}
+        {role === "adult" && memberId && (
+          <Link
+            href={`/kind/${memberId}`}
+            className="glass rounded-2xl p-4 flex items-center gap-3 hover:bg-white/10 transition-all active:scale-98 border border-blue-500/20"
+          >
+            <span className="text-3xl">📋</span>
+            <div className="flex-1">
+              <p className="font-bold text-white">Meine Aufgaben</p>
+              <p className="text-white/50 text-sm">Aufgaben ansehen & erledigen</p>
+            </div>
+            <ArrowRightIcon className="w-5 h-5 text-white/40" />
+          </Link>
+        )}
 
         {/* Pending approvals */}
         {allPending.length > 0 && (
@@ -178,10 +195,10 @@ function DashboardContent({ userName }: DashboardClientProps) {
   );
 }
 
-export default function DashboardClient({ userName }: DashboardClientProps) {
+export default function DashboardClient({ userName, role, memberId }: DashboardClientProps) {
   return (
     <AppShell>
-      <DashboardContent userName={userName} />
+      <DashboardContent userName={userName} role={role} memberId={memberId} />
     </AppShell>
   );
 }

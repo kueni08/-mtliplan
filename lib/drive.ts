@@ -29,32 +29,24 @@ async function exchangeRefreshToken(refreshToken: string): Promise<string> {
 async function getAccessToken(): Promise<string> {
   const session = await auth();
 
-  // Admin session: use access token if still valid, otherwise refresh proactively
-  if (session?.accessToken) {
-    const expired =
-      session.expiresAt != null &&
-      Date.now() > (session.expiresAt * 1000) - 60_000;
-
-    if (!expired) return session.accessToken;
-
-    // Access token expired – use refresh token to get a new one
-    if (session.refreshToken) {
-      return exchangeRefreshToken(session.refreshToken);
+  // Admin: use their own Google tokens (they own the Drive file)
+  if (session?.role === "admin") {
+    if (session.accessToken) {
+      const expired =
+        session.expiresAt != null &&
+        Date.now() > (session.expiresAt * 1000) - 60_000;
+      if (!expired) return session.accessToken;
+      if (session.refreshToken) return exchangeRefreshToken(session.refreshToken);
     }
-    // No refresh token (shouldn't happen for Google OAuth) – fall through
+    if (session.refreshToken) return exchangeRefreshToken(session.refreshToken);
   }
 
-  // Admin with no access token but with refresh token
-  if (session?.refreshToken && !session.householdRefreshToken) {
-    return exchangeRefreshToken(session.refreshToken);
-  }
-
-  // Child session: use the household refresh token stored in the JWT
+  // Child / adult: their JWT has householdRefreshToken (admin's token) stored at login
   if (session?.householdRefreshToken) {
     return exchangeRefreshToken(session.householdRefreshToken);
   }
 
-  // Backward compat: env var (single-household deployments)
+  // Fallback: HOUSEHOLD_REFRESH_TOKEN env var
   if (process.env.HOUSEHOLD_REFRESH_TOKEN) {
     return exchangeRefreshToken(process.env.HOUSEHOLD_REFRESH_TOKEN);
   }

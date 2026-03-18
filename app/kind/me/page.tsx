@@ -1,13 +1,13 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
-// Redirect shortcut: /kind/me → /kind/[childId] for the logged-in child session
+// Redirect shortcut: /kind/me → /kind/[memberId] for the logged-in child/adult session
 export default async function KindMePage() {
   const session = await auth();
   if (!session) redirect("/");
-  if (session.role === "child" && session.childId) {
-    redirect(`/kind/${session.childId}`);
+  if (session.role === "pending") redirect("/pending");
+  if ((session.role === "child" || session.role === "adult") && session.memberId) {
+    redirect(`/kind/${session.memberId}`);
   }
-  // Admin visiting /kind/me → go to dashboard
   redirect("/dashboard");
 }
