@@ -31,17 +31,37 @@ function KindContent({ childId }: KindClientProps) {
 
   const stats = computeChildStats(data, childId);
 
-  // Today's assignments → show only assigned chores; fallback to all active
+  // Date ranges
   const today = new Date().toISOString().split("T")[0];
-  const todayAssignments = (data.assignments ?? []).filter(
-    (a) => a.childId === childId && a.date === today
-  );
-  const assignedChores = todayAssignments
+  const in3Days = new Date();
+  in3Days.setDate(in3Days.getDate() + 3);
+  const in3DaysStr = in3Days.toISOString().split("T")[0];
+
+  const allAssignments = (data.assignments ?? []).filter((a) => a.childId === childId);
+  const hasAnyAssignments = allAssignments.length > 0;
+
+  const todayAssignments  = allAssignments.filter((a) => a.date === today);
+  const upcomingAssignments = allAssignments
+    .filter((a) => a.date > today && a.date <= in3DaysStr)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const futureAssignments = allAssignments
+    .filter((a) => a.date > in3DaysStr)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 14);
+
+  // Today's chores (or fallback to all active when no assignments exist)
+  const todayChores = todayAssignments
     .map((a) => data.chores.find((c) => c.id === a.choreId))
     .filter((c): c is NonNullable<typeof c> => c !== undefined && c.active);
-  const activeChores = assignedChores.length > 0
-    ? assignedChores
-    : data.chores.filter((c) => c.active);
+  const choresToShow = hasAnyAssignments ? todayChores : data.chores.filter((c) => c.active);
+
+  const formatDate = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const diff = Math.round((d.getTime() - new Date(today + "T00:00:00").getTime()) / 86400000);
+    if (diff === 1) return "Morgen";
+    if (diff === 2) return "Übermorgen";
+    return d.toLocaleDateString("de-CH", { weekday: "long", day: "numeric", month: "short" });
+  };
   const effectiveLevels = data.settings.levelConfig ?? DEFAULT_LEVELS;
   const levelInfo = getLevelInfo(stats.totalXP, effectiveLevels);
   const xpColor = child.color === "orange" ? "text-orange-300" : "text-purple-300";
@@ -169,16 +189,16 @@ function KindContent({ childId }: KindClientProps) {
         {/* Today's chores */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">📋 Aufgaben von heute</h2>
-            {assignedChores.length > 0 && (
+            <h2 className="text-lg font-bold text-white">📋 Heute</h2>
+            {hasAnyAssignments && todayChores.length > 0 && (
               <span className="text-xs text-blue-300 bg-blue-500/10 px-2 py-0.5 rounded-full">📆 Zugeteilt</span>
             )}
           </div>
-          {activeChores.length === 0 ? (
-            <p className="text-white/50 text-center py-6">Noch keine Aufgaben eingerichtet</p>
+          {choresToShow.length === 0 ? (
+            <p className="text-white/50 text-center py-6">Keine Aufgaben für heute</p>
           ) : (
             <div className="space-y-2">
-              {activeChores.map((chore) => {
+              {choresToShow.map((chore) => {
                 const isMultiDaily = chore.frequency === "multiple_daily";
                 const completed = !isMultiDaily && hasCompletedChoreToday(
                   data.completions.filter((c) => c.approved),
@@ -204,6 +224,63 @@ function KindContent({ childId }: KindClientProps) {
             </div>
           )}
         </div>
+
+        {/* Upcoming chores — next 3 days, can be pulled forward */}
+        {upcomingAssignments.length > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-bold text-white">🔜 Demnächst</h2>
+              <span className="text-xs text-green-300/60 bg-green-500/10 px-2 py-0.5 rounded-full">vorziehbar</span>
+            </div>
+            <div className="space-y-2">
+              {upcomingAssignments.map((assignment) => {
+                const chore = data.chores.find((c) => c.id === assignment.choreId && c.active);
+                if (!chore) return null;
+                const isMultiDaily = chore.frequency === "multiple_daily";
+                const completed = !isMultiDaily && hasCompletedChoreToday(
+                  data.completions.filter((c) => c.approved), chore.id, childId
+                );
+                const pending = !isMultiDaily && hasCompletedChoreToday(
+                  data.completions.filter((c) => !c.approved), chore.id, childId
+                );
+                return (
+                  <div key={assignment.id} className="space-y-1">
+                    <p className="text-xs text-white/40 pl-1">{formatDate(assignment.date)}</p>
+                    <ChoreCard
+                      chore={chore}
+                      completed={completed}
+                      pending={pending}
+                      onComplete={() => handleChoreComplete(chore.id)}
+                      childColor={child.color}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Future planned chores — info only, not clickable */}
+        {futureAssignments.length > 0 && (
+          <div className="space-y-3">
+            <h2 className="text-base font-bold text-white/40">📅 Geplant</h2>
+            <div className="space-y-2">
+              {futureAssignments.map((assignment) => {
+                const chore = data.chores.find((c) => c.id === assignment.choreId);
+                if (!chore) return null;
+                return (
+                  <div key={assignment.id} className="glass rounded-2xl p-3 flex items-center gap-3 opacity-50">
+                    <span className="text-xl">{chore.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/70 text-sm font-medium truncate">{chore.title}</p>
+                      <p className="text-white/40 text-xs">{formatDate(assignment.date)} · +{chore.xp} XP</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Stats strip */}
         <div className="grid grid-cols-3 gap-3">
