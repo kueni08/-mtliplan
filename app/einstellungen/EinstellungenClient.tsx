@@ -588,13 +588,13 @@ function EinstellungenContent({
         </div>
       )}
       {/* ── STATISTIK ── */}
-      {tab === "statistik" && (() => {
-        const allMembers = data.settings.children;
-        const approvedCompletions = data.completions.filter((c) => c.approved);
-
-        // Period filter state is lifted inline
-        return <StatistikTab chores={data.chores} members={allMembers} completions={approvedCompletions} />;
-      })()}
+      {tab === "statistik" && (
+        <StatistikTab
+          chores={data.chores}
+          members={data.settings.children}
+          completions={data.completions.filter((c) => c.approved)}
+        />
+      )}
     </div>
   );
 }
@@ -1219,13 +1219,19 @@ function StatistikTab({
     counts[c.choreId][c.childId] = (counts[c.choreId][c.childId] ?? 0) + 1;
   }
 
-  const activeChoreIds = Object.keys(counts);
-  const relevantChores = chores.filter((ch) => activeChoreIds.includes(ch.id));
+  const activeChoreIdSet = new Set(Object.keys(counts));
+  const relevantChores = chores.filter((ch) => activeChoreIdSet.has(ch.id));
 
-  // Total completions per member
+  // Derive per-member totals from counts (avoids re-iterating filtered)
   const memberTotals: Record<string, number> = {};
   members.forEach((m) => {
-    memberTotals[m.id] = filtered.filter((c) => c.childId === m.id).length;
+    memberTotals[m.id] = Object.values(counts).reduce((s, map) => s + (map[m.id] ?? 0), 0);
+  });
+
+  // Pre-compute total per chore for sort + display (avoids recomputing in comparator)
+  const choreTotal: Record<string, number> = {};
+  relevantChores.forEach((chore) => {
+    choreTotal[chore.id] = members.reduce((s, m) => s + (counts[chore.id]?.[m.id] ?? 0), 0);
   });
 
   return (
@@ -1272,14 +1278,11 @@ function StatistikTab({
           </div>
           {/* Rows sorted by total completions desc */}
           {relevantChores
-            .sort((a, b) => {
-              const tA = members.reduce((s, m) => s + (counts[a.id]?.[m.id] ?? 0), 0);
-              const tB = members.reduce((s, m) => s + (counts[b.id]?.[m.id] ?? 0), 0);
-              return tB - tA;
-            })
+            .slice()
+            .sort((a, b) => choreTotal[b.id] - choreTotal[a.id])
             .map((chore) => {
-              const total  = members.reduce((s, m) => s + (counts[chore.id]?.[m.id] ?? 0), 0);
-              const maxCnt = Math.max(...members.map((m) => counts[chore.id]?.[m.id] ?? 0));
+              const total  = choreTotal[chore.id];
+              const maxCnt = members.reduce((max, m) => Math.max(max, counts[chore.id]?.[m.id] ?? 0), 0);
               return (
                 <div key={chore.id} className="flex items-center gap-2 px-4 py-3 border-b border-white/5 last:border-0">
                   <div className="flex-1 min-w-0 flex items-center gap-2">

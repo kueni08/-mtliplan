@@ -35,7 +35,11 @@ export function generateAssignments(
   const cycleStart = new Date(presenceSchedule.cycleStartDate + "T00:00:00");
   const from = new Date(fromDate + "T00:00:00");
   const to   = new Date(toDate   + "T00:00:00");
+  const toMs = to.getTime();
   const msPerDay = 1000 * 60 * 60 * 24;
+
+  // Pre-index presence patterns by childId for O(1) lookup
+  const patternByChild = new Map(presenceSchedule.patterns.map((p) => [p.childId, p]));
 
   const assignments: ChoreAssignment[] = [];
 
@@ -75,12 +79,12 @@ export function generateAssignments(
     daysSince: number,
     weekBlock: number
   ): boolean => {
-    const pattern = presenceSchedule.patterns.find((p) => p.childId === childId);
+    const pattern = patternByChild.get(childId);
     if (!pattern) return false;
     const blockEnd = (weekBlock + 1) * 7 - 1;
+    const cycleStartMs = cycleStart.getTime();
     for (let d = daysSince + 1; d <= blockEnd; d++) {
-      const futureDate = new Date(cycleStart.getTime() + d * msPerDay);
-      if (futureDate > to) break;
+      if (cycleStartMs + d * msPerDay > toMs) break;
       const futureIdx = ((d % 14) + 14) % 14;
       if (pattern.days[futureIdx] === "ganztag") return true;
     }
@@ -97,13 +101,16 @@ export function generateAssignments(
     // Base capacity for each child today
     const remaining: Record<string, number> = {};
     children.forEach((c) => {
-      const pattern = presenceSchedule.patterns.find((p) => p.childId === c.id);
-      const type: PresenceType = pattern?.days[dayIndex] ?? "absent";
+      const type: PresenceType = patternByChild.get(c.id)?.days[dayIndex] ?? "absent";
       remaining[c.id] = CAPACITY[type];
     });
 
     // Track which chores have already been assigned today (one child per chore per day)
     const assignedChoreToday = new Set<string>();
+
+    // XP threshold for equalization override — computed once per day (stable enough)
+    const totalXP = Object.values(xpBalance).reduce((s, v) => s + v, 0);
+    const xpThreshold = Math.max(30, totalXP * 0.15);
 
     // Eligible chores today — sorted by XP descending (higher-value chores assigned first)
     const eligibleChores = activeChores
@@ -130,8 +137,7 @@ export function generateAssignments(
         // Exclude a child from today's candidates if they have a ganztag day coming
         // in this block AND today is not ganztag for them.
         candidates = candidates.filter((c) => {
-          const cPattern = presenceSchedule.patterns.find((p) => p.childId === c.id);
-          const todayType: PresenceType = cPattern?.days[dayIndex] ?? "absent";
+          const todayType: PresenceType = patternByChild.get(c.id)?.days[dayIndex] ?? "absent";
           if (todayType === "ganztag") return true;           // best day → include
           return !hasGanztachDayComingInBlock(c.id, daysSince, weekBlock); // no better day coming → include
         });
@@ -142,9 +148,6 @@ export function generateAssignments(
       // Pick the best candidate combining rotation + XP equalization:
       // - Primary: prefer the child who has done THIS chore fewer times (rotation).
       // - Override: if XP gap is large (> ~15% of total assigned XP) prioritize lower-XP child.
-      const totalXP = Object.values(xpBalance).reduce((s, v) => s + v, 0);
-      const xpThreshold = Math.max(30, totalXP * 0.15);
-
       candidates.sort((a, b) => {
         const xpA    = xpBalance[a.id];
         const xpB    = xpBalance[b.id];
