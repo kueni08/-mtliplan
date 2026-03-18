@@ -9,8 +9,12 @@ const CAPACITY: Record<PresenceType, number> = {
 
 /**
  * Generate a suggested chore assignment plan for the given date range.
- * Distributes chores across children to equalise total XP earned.
- * Returns the assignments without saving — caller must persist via saveAssignments().
+ *
+ * Improvements over the previous version:
+ * - Weekly chores are deferred to "ganztag" days when possible within the same 7-day block.
+ * - Task rotation: each chore alternates between children based on historical completion counts.
+ * - XP equalization: used as a tiebreaker when rotation counts are equal; XP gap > threshold
+ *   overrides rotation to keep balance within ~10-15%.
  */
 export function generateAssignments(
   data: AppData,
@@ -31,6 +35,7 @@ export function generateAssignments(
   const cycleStart = new Date(presenceSchedule.cycleStartDate + "T00:00:00");
   const from = new Date(fromDate + "T00:00:00");
   const to   = new Date(toDate   + "T00:00:00");
+  const msPerDay = 1000 * 60 * 60 * 24;
 
   const assignments: ChoreAssignment[] = [];
 
@@ -38,8 +43,20 @@ export function generateAssignments(
   const xpBalance: Record<string, number> = {};
   children.forEach((c) => (xpBalance[c.id] = 0));
 
+  // Per-chore assignment count — seeded with historical approved completions,
+  // then incremented as we generate new assignments (ensures rotation within the plan too).
+  const choreCount: Record<string, Record<string, number>> = {};
+  activeChores.forEach((c) => {
+    choreCount[c.id] = {};
+    children.forEach((ch) => (choreCount[c.id][ch.id] = 0));
+  });
+  for (const comp of data.completions.filter((c) => c.approved)) {
+    if (choreCount[comp.choreId]?.[comp.childId] !== undefined) {
+      choreCount[comp.choreId][comp.childId]++;
+    }
+  }
+
   // For weekly chores: track which 7-day block each child has already been assigned it
-  // weeklyDone[choreId][childId][weekBlockIndex] = true
   const weeklyDone: Record<string, Record<string, Set<number>>> = {};
   activeChores
     .filter((c) => c.frequency === "weekly")
@@ -48,18 +65,36 @@ export function generateAssignments(
       children.forEach((ch) => (weeklyDone[c.id][ch.id] = new Set()));
     });
 
-  const msPerDay = 1000 * 60 * 60 * 24;
+  /**
+   * Returns true if the given child has a "ganztag" day remaining in the same
+   * 7-day block after `daysSince`, within the planning range (toDate).
+   * Used to defer weekly chores to their best day.
+   */
+  const hasGanztachDayComingInBlock = (
+    childId: string,
+    daysSince: number,
+    weekBlock: number
+  ): boolean => {
+    const pattern = presenceSchedule.patterns.find((p) => p.childId === childId);
+    if (!pattern) return false;
+    const blockEnd = (weekBlock + 1) * 7 - 1;
+    for (let d = daysSince + 1; d <= blockEnd; d++) {
+      const futureDate = new Date(cycleStart.getTime() + d * msPerDay);
+      if (futureDate > to) break;
+      const futureIdx = ((d % 14) + 14) % 14;
+      if (pattern.days[futureIdx] === "ganztag") return true;
+    }
+    return false;
+  };
 
   const current = new Date(from);
   while (current <= to) {
-    const dateStr = current.toISOString().split("T")[0];
-
-    // Which day in the 2-week cycle is this?
+    const dateStr  = current.toISOString().split("T")[0];
     const daysSince = Math.round((current.getTime() - cycleStart.getTime()) / msPerDay);
-    const dayIndex  = ((daysSince % 14) + 14) % 14; // 0–13
-    const weekBlock = Math.floor(daysSince / 7);     // absolute 7-day block index
+    const dayIndex  = ((daysSince % 14) + 14) % 14;
+    const weekBlock = Math.floor(daysSince / 7);
 
-    // Capacity remaining per child today
+    // Base capacity for each child today
     const remaining: Record<string, number> = {};
     children.forEach((c) => {
       const pattern = presenceSchedule.patterns.find((p) => p.childId === c.id);
@@ -67,39 +102,63 @@ export function generateAssignments(
       remaining[c.id] = CAPACITY[type];
     });
 
-    // Track chores already assigned today (exclusivity: one child per chore per day)
-    // multiple_daily chores are exempt from this constraint
+    // Track which chores have already been assigned today (one child per chore per day)
     const assignedChoreToday = new Set<string>();
 
-    // Chores eligible today (sorted by XP descending for best equalization)
+    // Eligible chores today — sorted by XP descending (higher-value chores assigned first)
     const eligibleChores = activeChores
       .filter((chore) => {
         if (chore.frequency === "weekly") {
-          // Include only if at least one child hasn't done it in this week-block yet
           return children.some((c) => !weeklyDone[chore.id]?.[c.id]?.has(weekBlock));
         }
-        return true; // daily / multiple_daily
+        return true;
       })
       .sort((a, b) => b.xp - a.xp);
 
     for (const chore of eligibleChores) {
-      // Exclusivity: skip chore if already assigned to someone today (unless multiple_daily)
       if (chore.frequency !== "multiple_daily" && assignedChoreToday.has(chore.id)) continue;
 
-      // Children who still have capacity today
+      // Children with capacity remaining today
       let candidates = children.filter((c) => remaining[c.id] > 0);
 
-      // For weekly chores, additionally exclude children who already had it this block
       if (chore.frequency === "weekly") {
+        // Exclude children who already had this chore this week-block
         candidates = candidates.filter(
           (c) => !weeklyDone[chore.id]?.[c.id]?.has(weekBlock)
         );
+        // Defer weekly chores to ganztag days:
+        // Exclude a child from today's candidates if they have a ganztag day coming
+        // in this block AND today is not ganztag for them.
+        candidates = candidates.filter((c) => {
+          const cPattern = presenceSchedule.patterns.find((p) => p.childId === c.id);
+          const todayType: PresenceType = cPattern?.days[dayIndex] ?? "absent";
+          if (todayType === "ganztag") return true;           // best day → include
+          return !hasGanztachDayComingInBlock(c.id, daysSince, weekBlock); // no better day coming → include
+        });
       }
 
       if (candidates.length === 0) continue;
 
-      // Pick the candidate with the lowest accumulated XP (equalization)
-      candidates.sort((a, b) => xpBalance[a.id] - xpBalance[b.id]);
+      // Pick the best candidate combining rotation + XP equalization:
+      // - Primary: prefer the child who has done THIS chore fewer times (rotation).
+      // - Override: if XP gap is large (> ~15% of total assigned XP) prioritize lower-XP child.
+      const totalXP = Object.values(xpBalance).reduce((s, v) => s + v, 0);
+      const xpThreshold = Math.max(30, totalXP * 0.15);
+
+      candidates.sort((a, b) => {
+        const xpA    = xpBalance[a.id];
+        const xpB    = xpBalance[b.id];
+        const countA = choreCount[chore.id]?.[a.id] ?? 0;
+        const countB = choreCount[chore.id]?.[b.id] ?? 0;
+
+        // If XP gap is large, equalize first regardless of rotation
+        if (Math.abs(xpA - xpB) > xpThreshold) return xpA - xpB;
+        // Otherwise rotate this specific task
+        if (countA !== countB) return countA - countB;
+        // Final tiebreak: XP balance
+        return xpA - xpB;
+      });
+
       const chosen = candidates[0];
 
       assignments.push({
@@ -112,12 +171,11 @@ export function generateAssignments(
 
       xpBalance[chosen.id] += chore.xp;
       remaining[chosen.id]--;
+      if (choreCount[chore.id]) choreCount[chore.id][chosen.id]++;
 
-      // Mark chore as taken today (exclusivity for non-multiple_daily)
       if (chore.frequency !== "multiple_daily") {
         assignedChoreToday.add(chore.id);
       }
-
       if (chore.frequency === "weekly") {
         weeklyDone[chore.id][chosen.id].add(weekBlock);
       }
@@ -146,7 +204,7 @@ export function calcAssignmentXP(
 /** Get the Monday of the current week as ISO date string. */
 export function getCurrentMonday(): string {
   const d = new Date();
-  const day = d.getDay(); // 0=Sun, 1=Mon, ...
+  const day = d.getDay();
   const diff = (day === 0 ? -6 : 1 - day);
   d.setDate(d.getDate() + diff);
   return d.toISOString().split("T")[0];

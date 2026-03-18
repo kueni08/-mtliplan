@@ -6,7 +6,7 @@ import { useAppStore } from "@/store/useAppStore";
 import { DEFAULT_LEVELS } from "@/lib/gamification";
 import { generateAssignments, calcAssignmentXP, getCurrentMonday } from "@/lib/scheduler";
 import { PlusIcon, TrashIcon, PencilIcon } from "@heroicons/react/24/solid";
-import type { Chore, Reward, HouseholdMember, LevelConfig, PresenceType, ChoreFrequency, ChoreAssignment } from "@/lib/types";
+import type { Chore, Reward, HouseholdMember, LevelConfig, PresenceType, ChoreFrequency, ChoreAssignment, Completion } from "@/lib/types";
 
 const AVATARS = ["🦸", "🧙", "🦊", "🐉", "🦁", "🐺", "🦄", "🤖", "👾", "🎮", "🐼", "🐨"];
 
@@ -28,7 +28,7 @@ const CHORE_EMOJIS  = ["🍽️","🫧","🛏️","🗑️","🧹","🪣","🌿"
 const REWARD_EMOJIS = ["🎬","🍕","😴","🎮","🍦","🎁","🏆","🎯","🎨","🎵","🎲","🎪"];
 const CATEGORIES = ["küche","zimmer","haus","sonstiges"] as const;
 
-type Tab = "haushalt" | "aufgaben" | "belohnungen" | "stufen" | "wochenplan";
+type Tab = "haushalt" | "aufgaben" | "belohnungen" | "stufen" | "wochenplan" | "statistik";
 
 function EinstellungenContent({
   needsSetup,
@@ -87,8 +87,9 @@ function EinstellungenContent({
     { id: "haushalt",    label: "Haushalt",    emoji: "👨‍👩‍👧" },
     { id: "aufgaben",    label: "Aufgaben",    emoji: "📋" },
     { id: "belohnungen", label: "Belohnungen", emoji: "🎁" },
-    { id: "stufen",      label: "Stufen",      emoji: "📊" },
+    { id: "stufen",      label: "Stufen",      emoji: "🏆" },
     { id: "wochenplan",  label: "Wochenplan",  emoji: "📆" },
+    { id: "statistik",   label: "Statistik",   emoji: "📊" },
   ];
 
   const children = data.settings.children.filter(c => c.role === "child" || !c.role);
@@ -586,6 +587,14 @@ function EinstellungenContent({
           })()}
         </div>
       )}
+      {/* ── STATISTIK ── */}
+      {tab === "statistik" && (() => {
+        const allMembers = data.settings.children;
+        const approvedCompletions = data.completions.filter((c) => c.approved);
+
+        // Period filter state is lifted inline
+        return <StatistikTab chores={data.chores} members={allMembers} completions={approvedCompletions} />;
+      })()}
     </div>
   );
 }
@@ -1173,6 +1182,129 @@ function RewardAddForm({ onSave, onCancel }: { onSave: (r: Omit<Reward, "id">) =
           Abbrechen
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Statistik Tab ────────────────────────────────────────────────────────────
+
+const PERIODS = [
+  { label: "Alle",    days: 0  },
+  { label: "30 Tage", days: 30 },
+  { label: "14 Tage", days: 14 },
+  { label: "7 Tage",  days: 7  },
+] as const;
+
+function StatistikTab({
+  chores,
+  members,
+  completions,
+}: {
+  chores: Chore[];
+  members: HouseholdMember[];
+  completions: Completion[];
+}) {
+  const [periodDays, setPeriodDays] = useState<number>(0);
+
+  const cutoff = periodDays > 0
+    ? new Date(Date.now() - periodDays * 86400000).toISOString().split("T")[0]
+    : null;
+
+  const filtered = cutoff ? completions.filter((c) => c.date >= cutoff) : completions;
+
+  // Count completions per chore per member
+  const counts: Record<string, Record<string, number>> = {};
+  for (const c of filtered) {
+    if (!counts[c.choreId]) counts[c.choreId] = {};
+    counts[c.choreId][c.childId] = (counts[c.choreId][c.childId] ?? 0) + 1;
+  }
+
+  const activeChoreIds = Object.keys(counts);
+  const relevantChores = chores.filter((ch) => activeChoreIds.includes(ch.id));
+
+  // Total completions per member
+  const memberTotals: Record<string, number> = {};
+  members.forEach((m) => {
+    memberTotals[m.id] = filtered.filter((c) => c.childId === m.id).length;
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Period selector */}
+      <div className="flex gap-2">
+        {PERIODS.map(({ label, days }) => (
+          <button
+            key={label}
+            onClick={() => setPeriodDays(days)}
+            className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
+              periodDays === days ? "bg-purple-600 text-white" : "bg-white/10 text-white/60"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Summary cards */}
+      <div className="flex gap-3">
+        {members.map((m) => (
+          <div key={m.id} className="flex-1 glass rounded-2xl p-3 text-center">
+            <span className="text-2xl">{m.avatar}</span>
+            <p className="text-white font-bold mt-1 text-sm">{m.name}</p>
+            <p className="text-2xl font-black text-purple-300">{memberTotals[m.id] ?? 0}</p>
+            <p className="text-white/40 text-xs">Erledigungen</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Per-chore table */}
+      {relevantChores.length === 0 ? (
+        <p className="text-white/40 text-center py-8">Noch keine Erledigungen im gewählten Zeitraum</p>
+      ) : (
+        <div className="glass rounded-2xl overflow-hidden">
+          {/* Table header */}
+          <div className="flex items-center gap-2 px-4 py-2 bg-white/5 border-b border-white/10">
+            <span className="flex-1 text-xs font-semibold text-white/50 uppercase tracking-wider">Aufgabe</span>
+            {members.map((m) => (
+              <span key={m.id} className="w-12 text-center text-base" title={m.name}>{m.avatar}</span>
+            ))}
+            <span className="w-10 text-center text-xs font-semibold text-white/30 uppercase">∑</span>
+          </div>
+          {/* Rows sorted by total completions desc */}
+          {relevantChores
+            .sort((a, b) => {
+              const tA = members.reduce((s, m) => s + (counts[a.id]?.[m.id] ?? 0), 0);
+              const tB = members.reduce((s, m) => s + (counts[b.id]?.[m.id] ?? 0), 0);
+              return tB - tA;
+            })
+            .map((chore) => {
+              const total  = members.reduce((s, m) => s + (counts[chore.id]?.[m.id] ?? 0), 0);
+              const maxCnt = Math.max(...members.map((m) => counts[chore.id]?.[m.id] ?? 0));
+              return (
+                <div key={chore.id} className="flex items-center gap-2 px-4 py-3 border-b border-white/5 last:border-0">
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <span className="text-lg shrink-0">{chore.emoji}</span>
+                    <span className="text-white/80 text-sm truncate">{chore.title}</span>
+                  </div>
+                  {members.map((m) => {
+                    const cnt = counts[chore.id]?.[m.id] ?? 0;
+                    return (
+                      <span
+                        key={m.id}
+                        className={`w-12 text-center text-sm font-bold ${
+                          cnt === maxCnt && cnt > 0 ? "text-green-300" : cnt > 0 ? "text-white/70" : "text-white/20"
+                        }`}
+                      >
+                        {cnt || "–"}
+                      </span>
+                    );
+                  })}
+                  <span className="w-10 text-center text-xs text-white/40">{total}</span>
+                </div>
+              );
+            })}
+        </div>
+      )}
     </div>
   );
 }
