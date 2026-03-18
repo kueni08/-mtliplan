@@ -30,7 +30,23 @@ const CATEGORIES = ["küche","zimmer","haus","sonstiges"] as const;
 
 type Tab = "haushalt" | "aufgaben" | "belohnungen" | "stufen" | "wochenplan";
 
-function EinstellungenContent() {
+function EinstellungenContent({
+  needsSetup,
+  adminRefreshToken,
+}: {
+  needsSetup: boolean;
+  adminRefreshToken: string | null;
+}) {
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const copyToken = () => {
+    if (adminRefreshToken) {
+      navigator.clipboard.writeText(adminRefreshToken).then(() => {
+        setTokenCopied(true);
+        setTimeout(() => setTokenCopied(false), 2000);
+      });
+    }
+  };
+
   const {
     data,
     updateChild, addHouseholdMember, removeHouseholdMember,
@@ -152,6 +168,44 @@ function EinstellungenContent() {
               <p className="text-white/50 text-xs">Du kannst Mitglieder einladen und verwalten</p>
             </div>
           </div>
+
+          {/* Setup banner: HOUSEHOLD_REFRESH_TOKEN not configured */}
+          {needsSetup && (
+            <div className="glass rounded-2xl p-4 space-y-3 border border-yellow-500/40 bg-yellow-500/5">
+              <div className="flex items-start gap-2">
+                <span className="text-xl shrink-0">⚠️</span>
+                <div>
+                  <p className="font-bold text-yellow-300 text-sm">Mitglieder können sich noch nicht anmelden</p>
+                  <p className="text-white/50 text-xs mt-1">
+                    Füge deinen Haushalt-Token als <code className="bg-white/10 px-1 rounded">HOUSEHOLD_REFRESH_TOKEN</code> in deinen{" "}
+                    <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="text-blue-300 underline">Vercel Umgebungsvariablen</a> ein.
+                  </p>
+                </div>
+              </div>
+              {adminRefreshToken && (
+                <div className="space-y-2">
+                  <p className="text-xs text-white/40">Dein Token:</p>
+                  <div className="flex gap-2 items-center">
+                    <code className="flex-1 bg-black/30 rounded-xl px-3 py-2 text-xs text-white/60 truncate font-mono">
+                      {adminRefreshToken.slice(0, 20)}…
+                    </code>
+                    <button
+                      onClick={copyToken}
+                      className="shrink-0 px-3 py-2 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 text-xs rounded-xl transition-all font-medium"
+                    >
+                      {tokenCopied ? "✓ Kopiert" : "Kopieren"}
+                    </button>
+                  </div>
+                  <ol className="text-white/40 text-xs space-y-0.5 list-decimal list-inside">
+                    <li>Token kopieren</li>
+                    <li>Vercel → Projekt → Settings → Environment Variables</li>
+                    <li><code className="bg-white/10 px-1 rounded">HOUSEHOLD_REFRESH_TOKEN</code> = Token einfügen → Save</li>
+                    <li>Vercel Redeploy auslösen</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+          )}
 
           <h3 className="text-white/60 text-xs font-semibold uppercase tracking-wider">Mitglieder</h3>
 
@@ -312,7 +366,11 @@ function EinstellungenContent() {
                   <p className={`font-medium text-sm ${reward.active ? "text-white" : "text-white/40 line-through"}`}>
                     {reward.title}
                   </p>
-                  <p className="text-xs text-orange-300">{reward.cost} XP</p>
+                  <p className="text-xs text-orange-300">
+                    {reward.cost} XP
+                    {reward.targetAudience === "adult" && <span className="ml-1 text-blue-300">· 👤</span>}
+                    {reward.targetAudience === "all"   && <span className="ml-1 text-green-300">· 👥</span>}
+                  </p>
                 </div>
                 <button
                   onClick={() => updateReward(reward.id, { active: !reward.active })}
@@ -532,10 +590,16 @@ function EinstellungenContent() {
   );
 }
 
-export default function EinstellungenClient() {
+export default function EinstellungenClient({
+  needsSetup = false,
+  adminRefreshToken = null,
+}: {
+  needsSetup?: boolean;
+  adminRefreshToken?: string | null;
+}) {
   return (
     <AppShell>
-      <EinstellungenContent />
+      <EinstellungenContent needsSetup={needsSetup} adminRefreshToken={adminRefreshToken} />
     </AppShell>
   );
 }
@@ -958,10 +1022,17 @@ function ChoreAddForm({ onSave, onCancel }: { onSave: (c: Omit<Chore, "id">) => 
   );
 }
 
+const AUDIENCE_OPTIONS = [
+  { value: "child", label: "👧 Kinder" },
+  { value: "adult", label: "👤 Erwachsene" },
+  { value: "all",   label: "👥 Alle" },
+] as const;
+
 function RewardEditForm({ reward, onSave, onCancel }: { reward: Reward; onSave: (u: Partial<Reward>) => void; onCancel: () => void }) {
-  const [title, setTitle] = useState(reward.title);
-  const [cost, setCost]   = useState(reward.cost);
-  const [emoji, setEmoji] = useState(reward.emoji);
+  const [title,    setTitle]    = useState(reward.title);
+  const [cost,     setCost]     = useState(reward.cost);
+  const [emoji,    setEmoji]    = useState(reward.emoji);
+  const [audience, setAudience] = useState<Reward["targetAudience"]>(reward.targetAudience ?? "child");
   return (
     <div className="glass rounded-2xl p-4 space-y-3 border border-orange-500/40">
       <div className="flex gap-2">
@@ -976,8 +1047,19 @@ function RewardEditForm({ reward, onSave, onCancel }: { reward: Reward; onSave: 
       <input type="number" value={cost} onChange={(e) => setCost(Number(e.target.value))}
         className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none"
         placeholder="XP-Kosten" min={1} />
+      <div>
+        <p className="text-xs text-white/50 mb-2">Für wen:</p>
+        <div className="flex gap-2">
+          {AUDIENCE_OPTIONS.map(({ value, label }) => (
+            <button key={value} onClick={() => setAudience(value)}
+              className={`flex-1 px-2 py-2 rounded-xl text-xs font-medium transition-all ${audience === value ? "bg-orange-500 text-white" : "bg-white/10 text-white/60"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="flex gap-2">
-        <button onClick={() => onSave({ title, cost, emoji })}
+        <button onClick={() => onSave({ title, cost, emoji, targetAudience: audience })}
           className="flex-1 bg-orange-600 hover:bg-orange-500 text-white py-2 rounded-xl font-medium transition-all">
           Speichern
         </button>
@@ -1051,9 +1133,10 @@ function AssignmentList({
 }
 
 function RewardAddForm({ onSave, onCancel }: { onSave: (r: Omit<Reward, "id">) => void; onCancel: () => void }) {
-  const [title, setTitle] = useState("");
-  const [cost, setCost]   = useState(80);
-  const [emoji, setEmoji] = useState("🎁");
+  const [title,    setTitle]    = useState("");
+  const [cost,     setCost]     = useState(80);
+  const [emoji,    setEmoji]    = useState("🎁");
+  const [audience, setAudience] = useState<Reward["targetAudience"]>("child");
   return (
     <div className="glass rounded-2xl p-4 space-y-3 border border-orange-500/40">
       <p className="text-white font-medium text-sm">Neue Belohnung</p>
@@ -1069,8 +1152,19 @@ function RewardAddForm({ onSave, onCancel }: { onSave: (r: Omit<Reward, "id">) =
       <input type="number" value={cost} onChange={(e) => setCost(Number(e.target.value))}
         className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none"
         placeholder="XP-Kosten" min={1} />
+      <div>
+        <p className="text-xs text-white/50 mb-2">Für wen:</p>
+        <div className="flex gap-2">
+          {AUDIENCE_OPTIONS.map(({ value, label }) => (
+            <button key={value} onClick={() => setAudience(value)}
+              className={`flex-1 px-2 py-2 rounded-xl text-xs font-medium transition-all ${audience === value ? "bg-orange-500 text-white" : "bg-white/10 text-white/60"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="flex gap-2">
-        <button onClick={() => title && onSave({ title, cost, emoji, active: true })}
+        <button onClick={() => title && onSave({ title, cost, emoji, active: true, targetAudience: audience })}
           disabled={!title}
           className="flex-1 bg-orange-600 hover:bg-orange-500 disabled:bg-gray-600 text-white py-2 rounded-xl font-medium transition-all">
           Hinzufügen

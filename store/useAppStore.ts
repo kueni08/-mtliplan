@@ -77,13 +77,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const chore = data.chores.find((c) => c.id === choreId);
     if (!chore) return;
 
+    // Adults are auto-approved (trusted household members)
+    const memberRole = data.settings.children.find((m) => m.id === childId)?.role;
+    const autoApprove = memberRole === "adult";
+
     const completion: Completion = {
       id: uuidv4(),
       choreId,
       childId,
       date: new Date().toISOString().split("T")[0],
       xp: chore.xp,
-      approved: false,
+      approved: autoApprove,
+      approvedAt: autoApprove ? new Date().toISOString() : undefined,
     };
 
     await get()._save({ ...data, completions: [...data.completions, completion] });

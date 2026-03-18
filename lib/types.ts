@@ -41,6 +41,7 @@ export interface Reward {
   cost: number;
   emoji: string;
   active: boolean;
+  targetAudience?: "child" | "adult" | "all"; // default: "child"
 }
 
 export interface Completion {

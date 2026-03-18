@@ -228,9 +228,12 @@ function KindContent({ childId }: KindClientProps) {
           ))}
         </div>
 
-        {/* Reward shop */}
+        {/* Reward shop — filter by member role */}
         <RewardShop
-          rewards={data.rewards}
+          rewards={data.rewards.filter((r) => {
+            const ta = r.targetAudience ?? "child";
+            return ta === "all" || ta === (child.role ?? "child");
+          })}
           availableXP={stats.availableXP}
           onRedeem={(rewardId) => redeemReward(rewardId, childId)}
           childColor={child.color}
