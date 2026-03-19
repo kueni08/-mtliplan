@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import AppShell from "@/components/AppShell";
@@ -18,7 +19,7 @@ interface DashboardClientProps {
 }
 
 function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
-  const { data, approveCompletion, rejectCompletion } = useAppStore();
+  const { data, approveCompletionWithXp, rejectCompletion } = useAppStore();
 
   if (!data) return null;
 
@@ -80,42 +81,25 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
             </h2>
             <div className="space-y-2">
               {allPending.map((completion) => {
-                const chore = data.chores.find((c) => c.id === completion.choreId);
+                const chore = completion.choreId
+                  ? data.chores.find((c) => c.id === completion.choreId)
+                  : null;
                 const child = data.settings.children.find(
                   (c) => c.id === completion.childId
                 );
-                if (!chore || !child) return null;
+                // Skip if neither a known chore nor an ad-hoc note
+                if (!child || (!chore && !completion.note)) return null;
+                const isAdHoc = !chore;
                 return (
-                  <div
+                  <PendingRow
                     key={completion.id}
-                    className="flex items-center justify-between gap-3 bg-white/5 rounded-xl p-3"
-                  >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span>{child.avatar}</span>
-                      <div className="min-w-0">
-                        <p className="text-white text-sm font-medium truncate">
-                          {child.name}: {chore.title}
-                        </p>
-                        <p className="text-green-400 text-xs">+{chore.xp} XP</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        onClick={() => approveCompletion(completion.id)}
-                        className="bg-green-500/20 hover:bg-green-500/40 text-green-400 rounded-lg p-1.5 transition-colors"
-                        title="Genehmigen"
-                      >
-                        <CheckCircleIcon className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => rejectCompletion(completion.id)}
-                        className="bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg p-1.5 transition-colors"
-                        title="Ablehnen"
-                      >
-                        <XCircleIcon className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
+                    completion={completion}
+                    chore={chore ?? null}
+                    child={child}
+                    isAdHoc={isAdHoc}
+                    onApprove={(xp) => approveCompletionWithXp(completion.id, xp)}
+                    onReject={() => rejectCompletion(completion.id)}
+                  />
                 );
               })}
             </div>
@@ -192,6 +176,76 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
           </div>
         )}
       </div>
+  );
+}
+
+// ─── Pending approval row (needs own state for XP editing) ───────────────────
+
+import type { Completion, Chore, HouseholdMember } from "@/lib/types";
+
+function PendingRow({
+  completion,
+  chore,
+  child,
+  isAdHoc,
+  onApprove,
+  onReject,
+}: {
+  completion: Completion;
+  chore: Chore | null;
+  child: HouseholdMember;
+  isAdHoc: boolean;
+  onApprove: (xp: number) => void;
+  onReject: () => void;
+}) {
+  const [editXp, setEditXp] = useState(completion.xp);
+
+  return (
+    <div className={`rounded-xl p-3 ${isAdHoc ? "bg-purple-500/10 border border-purple-500/20" : "bg-white/5"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <span className="text-xl shrink-0 mt-0.5">{child.avatar}</span>
+          <div className="min-w-0">
+            <p className="text-white text-sm font-medium">
+              {child.name}
+              {isAdHoc
+                ? <span className="text-purple-300 ml-1 text-xs">(Zusatzaufgabe)</span>
+                : null
+              }
+            </p>
+            <p className="text-white/60 text-xs truncate">
+              {isAdHoc ? `✏️ ${completion.note}` : `${chore!.emoji} ${chore!.title}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* XP input — editable for all completions, required for ad-hoc */}
+          <input
+            type="number"
+            value={editXp}
+            onChange={(e) => setEditXp(Math.max(0, parseInt(e.target.value) || 0))}
+            min={0}
+            className="w-14 bg-white/10 text-green-400 text-xs text-center rounded-lg px-1 py-1 outline-none focus:ring-1 focus:ring-green-500/50"
+            title="XP anpassen"
+          />
+          <span className="text-green-400 text-xs">XP</span>
+          <button
+            onClick={() => onApprove(editXp)}
+            className="bg-green-500/20 hover:bg-green-500/40 text-green-400 rounded-lg p-1.5 transition-colors"
+            title="Genehmigen"
+          >
+            <CheckCircleIcon className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onReject}
+            className="bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg p-1.5 transition-colors"
+            title="Ablehnen"
+          >
+            <XCircleIcon className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -17,7 +17,9 @@ interface AppStore {
 
   // Chore completions
   markChoreComplete: (choreId: string, childId: string) => Promise<void>;
+  suggestAdHocTask: (childId: string, note: string, suggestedXp: number) => Promise<void>;
   approveCompletion: (completionId: string) => Promise<void>;
+  approveCompletionWithXp: (completionId: string, xp: number) => Promise<void>;
   rejectCompletion: (completionId: string) => Promise<void>;
 
   // Rewards
@@ -94,6 +96,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
     await get()._save({ ...data, completions: [...data.completions, completion] });
   },
 
+  suggestAdHocTask: async (childId, note, suggestedXp) => {
+    const { data } = get();
+    if (!data) return;
+    const memberRole = data.settings.children.find((m) => m.id === childId)?.role;
+    const autoApprove = memberRole === "adult";
+    const completion: Completion = {
+      id: uuidv4(),
+      choreId: null,
+      childId,
+      date: new Date().toISOString().split("T")[0],
+      xp: suggestedXp,
+      note,
+      approved: autoApprove,
+      approvedAt: autoApprove ? new Date().toISOString() : undefined,
+    };
+    await get()._save({ ...data, completions: [...data.completions, completion] });
+  },
+
   approveCompletion: async (completionId) => {
     const { data } = get();
     if (!data) return;
@@ -102,6 +122,19 @@ export const useAppStore = create<AppStore>((set, get) => ({
       completions: data.completions.map((c) =>
         c.id === completionId
           ? { ...c, approved: true, approvedAt: new Date().toISOString() }
+          : c
+      ),
+    });
+  },
+
+  approveCompletionWithXp: async (completionId, xp) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({
+      ...data,
+      completions: data.completions.map((c) =>
+        c.id === completionId
+          ? { ...c, xp, approved: true, approvedAt: new Date().toISOString() }
           : c
       ),
     });
