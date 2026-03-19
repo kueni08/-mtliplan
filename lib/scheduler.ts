@@ -55,6 +55,7 @@ export function generateAssignments(
     children.forEach((ch) => (choreCount[c.id][ch.id] = 0));
   });
   for (const comp of data.completions.filter((c) => c.approved)) {
+    if (!comp.choreId) continue;
     if (choreCount[comp.choreId]?.[comp.childId] !== undefined) {
       choreCount[comp.choreId][comp.childId]++;
     }

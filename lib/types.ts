@@ -46,12 +46,13 @@ export interface Reward {
 
 export interface Completion {
   id: string;
-  choreId: string;
+  choreId: string | null; // null for ad-hoc "Zusatzaufgabe" suggestions
   childId: string;
   date: string; // ISO date string
   xp: number;
   approved: boolean;
   approvedAt?: string;
+  note?: string; // description for ad-hoc tasks, or optional remark
 }
 
 export interface Redemption {

@@ -1212,9 +1212,10 @@ function StatistikTab({
 
   const filtered = cutoff ? completions.filter((c) => c.date >= cutoff) : completions;
 
-  // Count completions per chore per member
+  // Count completions per chore per member (skip ad-hoc entries with no choreId)
   const counts: Record<string, Record<string, number>> = {};
   for (const c of filtered) {
+    if (!c.choreId) continue;
     if (!counts[c.choreId]) counts[c.choreId] = {};
     counts[c.choreId][c.childId] = (counts[c.choreId][c.childId] ?? 0) + 1;
   }
