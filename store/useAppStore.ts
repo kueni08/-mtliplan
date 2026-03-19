@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { readAppData, writeAppData } from "@/lib/drive";
-import type { AppData, Completion, Redemption, Chore, Reward, HouseholdMember, LevelConfig, PresenceSchedule, ChoreAssignment } from "@/lib/types";
+import type { AppData, Completion, Redemption, Chore, Reward, HouseholdMember, LevelConfig, PresenceSchedule, ChoreAssignment, SkinUnlockConfig } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 
 interface AppStore {
@@ -49,6 +49,8 @@ interface AppStore {
 
   // Presence schedule & assignments
   updatePresenceSchedule: (schedule: PresenceSchedule) => Promise<void>;
+  updateSkinUnlockConfig: (config: SkinUnlockConfig) => Promise<void>;
+  toggleFavoriteChore: (memberId: string, choreId: string) => Promise<void>;
   saveAssignments: (assignments: ChoreAssignment[]) => Promise<void>;
   removeAssignment: (id: string) => Promise<void>;
   reassignChore: (assignmentId: string, newChildId: string) => Promise<void>;
@@ -281,6 +283,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
       ...data,
       settings: { ...data.settings, presenceSchedule: schedule },
     });
+  },
+
+  updateSkinUnlockConfig: async (config) => {
+    const { data } = get();
+    if (!data) return;
+    await get()._save({ ...data, settings: { ...data.settings, skinUnlockConfig: config } });
+  },
+
+  toggleFavoriteChore: async (memberId, choreId) => {
+    const { data } = get();
+    if (!data) return;
+    const member = data.settings.children.find((m) => m.id === memberId);
+    if (!member) return;
+    const favs = member.favoriteChoreIds ?? [];
+    const updated = favs.includes(choreId)
+      ? favs.filter((id) => id !== choreId)
+      : [...favs, choreId];
+    await get().updateChild(memberId, { favoriteChoreIds: updated });
   },
 
   saveAssignments: async (assignments) => {

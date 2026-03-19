@@ -1,6 +1,6 @@
 export type MemberRole = "child" | "adult";
-export type MemberColor = "purple" | "orange";
-export type CharacterTheme = "evoli" | "shire" | "pikachu" | "charmander" | "togepi" | "jigglypuff" | "squirtle";
+export type MemberColor = "purple" | "orange" | "blue" | "green" | "red" | "pink" | "yellow";
+export type CharacterTheme = "evoli" | "shire" | "pikachu" | "charmander" | "togepi" | "jigglypuff" | "squirtle" | "tupac" | "hermione";
 export type PresenceType = "absent" | "halbtag" | "ganztag";
 export type ChoreFrequency = "daily" | "weekly" | "multiple_daily" | "manual";
 
@@ -13,6 +13,8 @@ export interface HouseholdMember {
   characterTheme?: CharacterTheme;
   email?: string;
   passwordHash?: string; // bcryptjs hash for credential login (non-Google accounts)
+  favoriteChoreIds?: string[];  // pinned chores for adult view
+  unlockedSkins?: string[];     // e.g. ["golden"]
 }
 
 // Backward-compat alias
@@ -85,11 +87,17 @@ export interface ChoreAssignment {
   source: "suggested" | "manual";
 }
 
+export interface SkinUnlockConfig {
+  requiredDays: number;  // consecutive days (default 10)
+  minXpPerDay:  number;  // minimum XP per day to count (default 20)
+}
+
 export interface AppSettings {
   children: HouseholdMember[];
   custodySchedule: CustodySchedule;
   levelConfig?: LevelConfig[];
   presenceSchedule?: PresenceSchedule;
+  skinUnlockConfig?: SkinUnlockConfig;
 }
 
 export interface AppData {

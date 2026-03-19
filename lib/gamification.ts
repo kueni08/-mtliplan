@@ -1,4 +1,4 @@
-import type { AppData, ChildStats, Completion, LevelConfig, CharacterTheme } from "./types";
+import type { AppData, ChildStats, Completion, LevelConfig, CharacterTheme, SkinUnlockConfig } from "./types";
 
 export interface CharacterSkill {
   level: number;
@@ -9,11 +9,11 @@ export interface CharacterSkill {
 
 export const CHARACTER_SKILLS: Record<CharacterTheme, CharacterSkill[]> = {
   evoli: [
-    { level: 1, name: "Ruff",           emoji: "💫", desc: "Einfacher, aber treuer Angriff" },
-    { level: 2, name: "Sandwolke",      emoji: "🌪️", desc: "Wirbelt Sand auf und verwirrt Gegner" },
-    { level: 3, name: "Blitzattacke",   emoji: "⚡", desc: "Immer zuerst – blitzschnell!" },
-    { level: 4, name: "Biss",           emoji: "🦷", desc: "Kraftvoller Biss, macht Angst" },
-    { level: 5, name: "Letzter Ausweg", emoji: "🌟", desc: "Die stärkste Attacke – maximale Kraft" },
+    { level: 1, name: "Ruff",             emoji: "💫", desc: "Einfacher, aber treuer Angriff" },
+    { level: 2, name: "Schwanz Wedeln",   emoji: "🌀", desc: "Senkt die Verteidigung – Evolis Signature-Move" },
+    { level: 3, name: "Blitzattacke",     emoji: "⚡", desc: "Immer zuerst – blitzschnell!" },
+    { level: 4, name: "Biss",             emoji: "🦷", desc: "Kraftvoller Biss, der Angst macht" },
+    { level: 5, name: "Letzter Ausweg",   emoji: "🌟", desc: "Die stärkste Attacke – maximale Kraft" },
   ],
   shire: [
     { level: 1, name: "Schritt",            emoji: "🐾", desc: "Ruhig und sicher – kein Hindernis zu groß" },
@@ -37,11 +37,11 @@ export const CHARACTER_SKILLS: Record<CharacterTheme, CharacterSkill[]> = {
     { level: 5, name: "Inferno",       emoji: "🌟", desc: "Alles vernichtende Flammen" },
   ],
   togepi: [
-    { level: 1, name: "Schlag",        emoji: "👊", desc: "Ein einfacher, aber treuer Schlag" },
-    { level: 2, name: "Metronom",      emoji: "🎵", desc: "Zufällige Attacke – immer überraschend!" },
-    { level: 3, name: "Schwerttanz",   emoji: "⚔️", desc: "Erhöht stark den Angriff" },
-    { level: 4, name: "Zauberschein",  emoji: "✨", desc: "Blendend schöner Angriff" },
-    { level: 5, name: "Wunschtraum",   emoji: "🌟", desc: "Heilende Glückskraft – legendär" },
+    { level: 1, name: "Klaps",         emoji: "👊", desc: "Sanfter, aber nerviger Angriff" },
+    { level: 2, name: "Metronom",      emoji: "🎵", desc: "Führt eine zufällige Attacke aus – Togepi's Signature!" },
+    { level: 3, name: "Verzauber",     emoji: "✨", desc: "Charmant und unwiderstehlich – senkt Angriff des Gegners" },
+    { level: 4, name: "Glitzern",      emoji: "💎", desc: "Heller Glanz blendet alle in der Nähe" },
+    { level: 5, name: "Wunschtraum",   emoji: "🌟", desc: "Heilende Glückskraft in Reinform – legendär" },
   ],
   jigglypuff: [
     { level: 1, name: "Pfund",         emoji: "🎤", desc: "Sanfter Schlag mit dem Mikro" },
@@ -56,6 +56,24 @@ export const CHARACTER_SKILLS: Record<CharacterTheme, CharacterSkill[]> = {
     { level: 3, name: "Surfer",        emoji: "🏄", desc: "Riesige Welle überrollt alles" },
     { level: 4, name: "Wasserring",    emoji: "💎", desc: "Schützender Wasserring" },
     { level: 5, name: "Hydropumpe",    emoji: "🌟", desc: "Gewaltiger Hochdruckstrahl" },
+  ],
+
+  // ── Neue Charaktere ───────────────────────────────────────────────────────
+
+  tupac: [
+    { level: 1, name: "Rhyme",    emoji: "🎤", desc: "Der erste Vers – roh, echt, voller Energie" },
+    { level: 2, name: "Beat",     emoji: "🥁", desc: "Der Rhythmus sitzt – der Haushalt tanzt" },
+    { level: 3, name: "Verse",    emoji: "📝", desc: "Tiefe Lyrik, die unter die Haut geht" },
+    { level: 4, name: "Anthem",   emoji: "🎶", desc: "Ein ganzer Block singt mit – unaufhaltsam" },
+    { level: 5, name: "Legacy",   emoji: "👑", desc: "Unsterblich – für immer in den Herzen" },
+  ],
+
+  hermione: [
+    { level: 1, name: "Alohomora",    emoji: "🔓", desc: "Öffnet verschlossene Türen und Probleme" },
+    { level: 2, name: "Wingardium",   emoji: "✨", desc: "Wingardium Leviosa – leicht wie eine Feder" },
+    { level: 3, name: "Expecto",      emoji: "🦁", desc: "Expecto Patronum – Licht gegen jede Dunkelheit" },
+    { level: 4, name: "Protego",      emoji: "🛡️", desc: "Schützender Zauberschild – kein Angriff kommt durch" },
+    { level: 5, name: "Expelliarmus", emoji: "⚡", desc: "Entwaffnet jeden – die Waffe der wahren Heldin" },
   ],
 };
 
@@ -159,6 +177,33 @@ export function computeChildStats(data: AppData, childId: string): ChildStats {
     pendingCompletions,
     recentCompletions,
   };
+}
+
+/**
+ * Computes how many consecutive days (going back from today) the member has
+ * earned at least `skinUnlockConfig.minXpPerDay` approved XP.
+ */
+export function computeStreak(data: AppData, memberId: string): number {
+  const minXp = data.settings.skinUnlockConfig?.minXpPerDay ?? 20;
+
+  const xpByDate: Record<string, number> = {};
+  for (const c of data.completions) {
+    if (c.childId !== memberId || !c.approved) continue;
+    xpByDate[c.date] = (xpByDate[c.date] ?? 0) + c.xp;
+  }
+
+  let streak = 0;
+  const d = new Date();
+  while (true) {
+    const dateStr = d.toISOString().split("T")[0];
+    if ((xpByDate[dateStr] ?? 0) >= minXp) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
 }
 
 export function hasCompletedChoreToday(
