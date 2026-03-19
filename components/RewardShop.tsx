@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { Reward } from "@/lib/types";
+import type { Reward, MemberColor } from "@/lib/types";
+import { COLOR_MAP } from "@/lib/colors";
 
 interface RewardShopProps {
   rewards: Reward[];
   availableXP: number;
   onRedeem: (rewardId: string) => void;
-  childColor?: "purple" | "orange";
+  childColor?: MemberColor;
 }
 
 export default function RewardShop({
@@ -19,12 +20,7 @@ export default function RewardShop({
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const activeRewards = rewards.filter((r) => r.active);
-
-  const btnColor =
-    childColor === "orange"
-      ? "bg-orange-500 hover:bg-orange-400"
-      : "bg-purple-600 hover:bg-purple-500";
-  const xpColor = childColor === "orange" ? "text-orange-300" : "text-purple-300";
+  const { bg: btnColor, text: xpColor } = COLOR_MAP[childColor];
 
   if (activeRewards.length === 0) return null;
 

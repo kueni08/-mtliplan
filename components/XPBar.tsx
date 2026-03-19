@@ -1,17 +1,26 @@
 "use client";
 
+import type { MemberColor } from "@/lib/types";
+
 interface XPBarProps {
   current: number;
   total: number;
   percent: number;
-  color?: "purple" | "orange";
+  color?: MemberColor;
 }
 
+const GRADIENT: Record<MemberColor, string> = {
+  purple: "from-purple-400 to-violet-600",
+  orange: "from-yellow-400 to-orange-500",
+  blue:   "from-blue-400 to-cyan-500",
+  green:  "from-green-400 to-emerald-500",
+  red:    "from-red-400 to-rose-500",
+  pink:   "from-pink-400 to-fuchsia-500",
+  yellow: "from-yellow-300 to-amber-500",
+};
+
 export default function XPBar({ current, total, percent, color = "purple" }: XPBarProps) {
-  const gradient =
-    color === "orange"
-      ? "from-yellow-400 to-orange-500"
-      : "from-purple-400 to-violet-600";
+  const gradient = GRADIENT[color];
 
   return (
     <div className="space-y-1">

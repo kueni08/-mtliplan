@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import XPBar from "@/components/XPBar";
@@ -9,7 +9,8 @@ import ChoreCard from "@/components/ChoreCard";
 import RewardShop from "@/components/RewardShop";
 import CharacterAvatar from "@/components/CharacterAvatar";
 import { useAppStore } from "@/store/useAppStore";
-import { computeChildStats, hasCompletedChoreToday, getLevelInfo, CHARACTER_SKILLS, DEFAULT_LEVELS } from "@/lib/gamification";
+import { computeChildStats, hasCompletedChoreToday, getLevelInfo, CHARACTER_SKILLS, DEFAULT_LEVELS, computeStreak } from "@/lib/gamification";
+import { COLOR_MAP } from "@/lib/colors";
 
 interface KindClientProps {
   childId: string;
@@ -39,7 +40,7 @@ function relativeLabel(dateStr: string, today: string): string {
 }
 
 function KindContent({ childId }: KindClientProps) {
-  const { data, markChoreComplete, redeemReward, suggestAdHocTask } = useAppStore();
+  const { data, markChoreComplete, redeemReward, suggestAdHocTask, toggleFavoriteChore, updateChild } = useAppStore();
   const [justLeveledUp, setJustLeveledUp] = useState(false);
   const [xpAnimation, setXpAnimation] = useState<number | null>(null);
   const [adhocNote, setAdhocNote]   = useState("");
@@ -59,10 +60,23 @@ function KindContent({ childId }: KindClientProps) {
   const today           = offsetDate(0);
   const effectiveLevels = data.settings.levelConfig ?? DEFAULT_LEVELS;
   const levelInfo       = getLevelInfo(stats.totalXP, effectiveLevels);
-  const xpColor    = child.color === "orange" ? "text-orange-300" : "text-purple-300";
-  const bgGradient = child.color === "orange"
-    ? "from-orange-900/30 to-yellow-900/20"
-    : "from-purple-900/30 to-violet-900/20";
+  const colorStyle = COLOR_MAP[child.color ?? "purple"];
+  const xpColor    = colorStyle.text;
+  const bgGradient = colorStyle.gradient;
+
+  // Streak & skin unlock
+  const streak       = computeStreak(data, childId);
+  const requiredDays = data.settings.skinUnlockConfig?.requiredDays ?? 10;
+  const hasGolden    = child.unlockedSkins?.includes("golden") ?? false;
+  const skin         = hasGolden ? "golden" : "default";
+
+  // Auto-unlock golden skin when streak threshold reached
+  useEffect(() => {
+    if (!hasGolden && streak >= requiredDays) {
+      updateChild(childId, { unlockedSkins: [...(child.unlockedSkins ?? []), "golden"] });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streak, requiredDays, hasGolden]);
 
   // Assignments for this child
   const allAssignments = (data.assignments ?? []).filter((a) => a.childId === childId);
@@ -149,6 +163,153 @@ function KindContent({ childId }: KindClientProps) {
   const pastGroups   = pastDates.reverse().map(renderDateGroup).filter(Boolean);
   const futureGroups = futureDates.map(renderDateGroup).filter(Boolean);
 
+  // ── Adult view ────────────────────────────────────────────────────────────
+  if (child.role === "adult") {
+    const favIds     = child.favoriteChoreIds ?? [];
+    const allActive  = data.chores.filter((c) => c.active).sort((a, b) => a.title.localeCompare(b.title));
+    const favorites  = allActive.filter((c) => favIds.includes(c.id));
+    const rest       = allActive.filter((c) => !favIds.includes(c.id));
+
+    return (
+      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+        {/* Profile header */}
+        <div className={`glass rounded-3xl p-5 bg-gradient-to-br ${bgGradient} space-y-4`}>
+          <div className="flex items-center gap-4">
+            <div>
+              {child.characterTheme ? (
+                <CharacterAvatar theme={child.characterTheme} level={stats.level} size="md" skin={skin} />
+              ) : (
+                <span style={{ fontSize: "4rem" }}>{child.avatar}</span>
+              )}
+            </div>
+            <div className="flex-1">
+              <h1 className="text-2xl font-black text-white">{child.name}</h1>
+              <LevelBadge level={stats.level} size="md" />
+            </div>
+            <div className="text-right">
+              <p className={`text-3xl font-black ${xpColor}`}>{stats.availableXP}</p>
+              <p className="text-xs text-white/50">verfügbare XP</p>
+            </div>
+          </div>
+          {streak > 0 && (
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2 flex items-center justify-between">
+              <span className="text-orange-300 text-sm">🔥 {streak} Tage Streak</span>
+              {streak >= requiredDays
+                ? <span className="text-yellow-300 text-xs">✨ Goldener Skin freigeschaltet!</span>
+                : <span className="text-white/40 text-xs">Noch {requiredDays - streak} Tage bis zum Skin</span>
+              }
+            </div>
+          )}
+        </div>
+
+        {/* Favorites */}
+        {favorites.length > 0 && (
+          <div className="space-y-2">
+            <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">⭐ Favoriten</h2>
+            {favorites.map((chore) => (
+              <div key={chore.id} className="flex items-center gap-2">
+                <div className="flex-1">
+                  <ChoreCard
+                    chore={chore}
+                    completed={hasCompletedChoreToday(data.completions.filter((c) => c.approved), chore.id, childId)}
+                    pending={false}
+                    onComplete={() => markChoreComplete(chore.id, childId)}
+                    childColor={child.color}
+                  />
+                </div>
+                <button
+                  onClick={() => toggleFavoriteChore(childId, chore.id)}
+                  className="text-yellow-400 hover:text-white/50 text-xl transition-colors shrink-0"
+                  title="Aus Favoriten entfernen"
+                >
+                  📌
+                </button>
+              </div>
+            ))}
+            <div className="flex items-center gap-3 my-2">
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+          </div>
+        )}
+
+        {/* All chores */}
+        <div className="space-y-2">
+          <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">📋 Alle Aufgaben</h2>
+          {rest.map((chore) => (
+            <div key={chore.id} className="flex items-center gap-2">
+              <div className="flex-1">
+                <ChoreCard
+                  chore={chore}
+                  completed={hasCompletedChoreToday(data.completions.filter((c) => c.approved), chore.id, childId)}
+                  pending={false}
+                  onComplete={() => markChoreComplete(chore.id, childId)}
+                  childColor={child.color}
+                />
+              </div>
+              <button
+                onClick={() => toggleFavoriteChore(childId, chore.id)}
+                className="text-white/30 hover:text-yellow-400 text-xl transition-colors shrink-0"
+                title="Zu Favoriten hinzufügen"
+              >
+                📌
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Adhoc */}
+        <div className="glass rounded-3xl p-4 space-y-3 border border-white/10">
+          <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">✏️ Zusatzaufgabe eintragen</h2>
+          {adhocSent ? (
+            <p className="text-green-400 text-sm text-center py-2">✅ Aufgabe eingetragen!</p>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={adhocNote}
+                onChange={(e) => setAdhocNote(e.target.value)}
+                placeholder="Was hast du gemacht? z.B. Garage aufgeräumt"
+                className="w-full bg-white/10 text-white placeholder-white/30 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500/50"
+                maxLength={120}
+              />
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-white/50 shrink-0">XP:</label>
+                <input
+                  type="number"
+                  value={adhocXp}
+                  onChange={(e) => setAdhocXp(Math.max(1, parseInt(e.target.value) || 1))}
+                  min={1}
+                  max={500}
+                  className="w-20 bg-white/10 text-white rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+                <button
+                  onClick={handleAdhocSubmit}
+                  disabled={!adhocNote.trim()}
+                  className={`flex-1 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                    adhocNote.trim() ? `${colorStyle.bg} text-white` : "bg-white/10 text-white/30 cursor-not-allowed"
+                  }`}
+                >
+                  Eintragen
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Reward shop */}
+        <RewardShop
+          rewards={data.rewards.filter((r) => {
+            const ta = r.targetAudience ?? "child";
+            return ta === "all" || ta === "adult";
+          })}
+          availableXP={stats.availableXP}
+          onRedeem={(rewardId) => redeemReward(rewardId, childId)}
+          childColor={child.color}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
       {/* XP animation overlay */}
@@ -179,7 +340,7 @@ function KindContent({ childId }: KindClientProps) {
         <div className="flex items-center gap-4">
           <div className={justLeveledUp ? "level-up-animate" : ""}>
             {child.characterTheme ? (
-              <CharacterAvatar theme={child.characterTheme} level={stats.level} size="md" />
+              <CharacterAvatar theme={child.characterTheme} level={stats.level} size="md" skin={skin} />
             ) : (
               <span style={{ fontSize: "4rem" }}>{child.avatar}</span>
             )}
@@ -206,6 +367,16 @@ function KindContent({ childId }: KindClientProps) {
             color={child.color}
           />
         </div>
+
+        {streak > 0 && (
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2 flex items-center justify-between">
+            <span className="text-orange-300 text-sm">🔥 {streak} Tage Streak</span>
+            {streak >= requiredDays
+              ? <span className="text-yellow-300 text-xs">✨ Goldener Skin freigeschaltet!</span>
+              : <span className="text-white/40 text-xs">Noch {requiredDays - streak} Tage bis zum Skin</span>
+            }
+          </div>
+        )}
 
         {stats.pendingCompletions.length > 0 && (
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-3 py-2">
@@ -347,9 +518,7 @@ function KindContent({ childId }: KindClientProps) {
                 disabled={!adhocNote.trim()}
                 className={`flex-1 py-1.5 rounded-xl text-sm font-semibold transition-all ${
                   adhocNote.trim()
-                    ? child.color === "orange"
-                      ? "bg-orange-600 hover:bg-orange-500 text-white"
-                      : "bg-purple-600 hover:bg-purple-500 text-white"
+                    ? `${colorStyle.bg} text-white`
                     : "bg-white/10 text-white/30 cursor-not-allowed"
                 }`}
               >

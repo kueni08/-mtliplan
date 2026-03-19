@@ -6,13 +6,14 @@ interface CharacterAvatarProps {
   theme: CharacterTheme;
   level: number;
   size?: "sm" | "md" | "lg";
+  skin?: "default" | "golden";
 }
 
 const SIZE_SM = [40, 48, 56, 64, 72];
 const SIZE_MD = [64, 82, 100, 120, 140];
 const SIZE_LG = [80, 100, 120, 140, 160];
 
-export default function CharacterAvatar({ theme, level, size = "md" }: CharacterAvatarProps) {
+export default function CharacterAvatar({ theme, level, size = "md", skin = "default" }: CharacterAvatarProps) {
   const idx = Math.min(Math.max(level, 1), 5) - 1;
   const px =
     size === "sm" ? SIZE_SM[idx]
@@ -20,16 +21,31 @@ export default function CharacterAvatar({ theme, level, size = "md" }: Character
     : SIZE_MD[idx];
   const clamped = idx + 1;
 
+  let svg: React.ReactNode = null;
   switch (theme) {
-    case "evoli":     return <EvoliSVG      level={clamped} px={px} />;
-    case "shire":     return <ShireSVG      level={clamped} px={px} />;
-    case "pikachu":   return <PikachuSVG    level={clamped} px={px} />;
-    case "charmander":return <CharmanderSVG level={clamped} px={px} />;
-    case "togepi":    return <TogepiSVG     level={clamped} px={px} />;
-    case "jigglypuff":return <JigglypuffSVG level={clamped} px={px} />;
-    case "squirtle":  return <SquirtleSVG   level={clamped} px={px} />;
+    case "evoli":     svg = <EvoliSVG      level={clamped} px={px} />; break;
+    case "shire":     svg = <ShireSVG      level={clamped} px={px} />; break;
+    case "pikachu":   svg = <PikachuSVG    level={clamped} px={px} />; break;
+    case "charmander":svg = <CharmanderSVG level={clamped} px={px} />; break;
+    case "togepi":    svg = <TogepiSVG     level={clamped} px={px} />; break;
+    case "jigglypuff":svg = <JigglypuffSVG level={clamped} px={px} />; break;
+    case "squirtle":  svg = <SquirtleSVG   level={clamped} px={px} />; break;
+    case "tupac":     svg = <TupacSVG      level={clamped} px={px} />; break;
+    case "hermione":  svg = <HermioneSVG   level={clamped} px={px} />; break;
     default:          return null;
   }
+
+  if (skin === "golden") {
+    return (
+      <div style={{
+        filter: "drop-shadow(0 0 10px rgba(245,196,0,0.9)) saturate(1.4) brightness(1.15)",
+        display: "inline-block",
+      }}>
+        {svg}
+      </div>
+    );
+  }
+  return <>{svg}</>;
 }
 
 // ─── Eevee / Evoli ────────────────────────────────────────────────────────────
@@ -514,6 +530,8 @@ function JigglypuffSVG({ level, px }: { level: number; px: number }) {
   );
 }
 
+import React from "react";
+
 // ─── Squirtle / Schiggy ───────────────────────────────────────────────────────
 function SquirtleSVG({ level, px }: { level: number; px: number }) {
   const blue      = "#6890F0";
@@ -585,6 +603,213 @@ function SquirtleSVG({ level, px }: { level: number; px: number }) {
         <>
           <path d="M37,14 L40,5 L45,12 L50,3 L55,12 L60,5 L63,14 Z" fill={gold} stroke="#C8A000" strokeWidth="0.8" />
           <rect x="37" y="13" width="26" height="3" rx="1.5" fill={gold} />
+        </>
+      )}
+    </svg>
+  );
+}
+
+// ─── Tupac ────────────────────────────────────────────────────────────────────
+// Inspired by Tupac Shakur: dark skin tone, red bandana, gold chain, mic in hand
+function TupacSVG({ level, px }: { level: number; px: number }) {
+  const skin1    = "#8B5E3C"; // warm dark skin tone
+  const skin2    = "#A0714D"; // lighter skin highlight
+  const bandana  = "#C0392B"; // iconic red bandana
+  const chain    = "#F5C400"; // gold chain
+  const shirt    = "#1A1A1A"; // black sleeveless shirt
+  const mic      = "#C8C8C8"; // silver microphone
+  const dark     = "#1A0F08";
+  const gold     = "#F5C400";
+  const aura     = "#8B0000"; // level-4 red aura
+
+  return (
+    <svg width={px} height={px} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label={`Tupac Level ${level}`}>
+
+      {/* L4+: red aura ring */}
+      {level >= 4 && (
+        <ellipse cx="50" cy="58" rx="40" ry="34" fill="none" stroke={aura} strokeWidth="2.5" opacity="0.5" />
+      )}
+
+      {/* ── BODY / SHIRT ── */}
+      <ellipse cx="50" cy="78" rx="20" ry="16" fill={shirt} />
+      {/* Shoulders */}
+      <ellipse cx="32" cy="68" rx="10" ry="7" fill={skin1} />
+      <ellipse cx="68" cy="68" rx="10" ry="7" fill={skin1} />
+
+      {/* Arms */}
+      <rect x="22" y="68" width="9" height="18" rx="4.5" fill={skin1} />
+      <rect x="69" y="68" width="9" height="18" rx="4.5" fill={skin1} />
+
+      {/* Left fist */}
+      <ellipse cx="26" cy="88" rx="6" ry="4.5" fill={skin2} />
+      {/* Right hand holding mic */}
+      <ellipse cx="74" cy="87" rx="5.5" ry="4.5" fill={skin2} />
+      <rect x="71" y="86" width="5" height="12" rx="2" fill={mic} />
+      <ellipse cx="73.5" cy="85" rx="4" ry="3.5" fill={dark} opacity="0.75" />
+
+      {/* Gold chain */}
+      <path d="M38,62 Q50,70 62,62" stroke={chain} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <circle cx="50" cy="69" r="3" fill={chain} />
+      {level >= 2 && (
+        <circle cx="50" cy="69" r="4.5" fill="none" stroke={chain} strokeWidth="1" opacity="0.6" />
+      )}
+
+      {/* ── NECK ── */}
+      <rect x="44" y="54" width="12" height="11" rx="5" fill={skin1} />
+
+      {/* ── HEAD ── */}
+      <circle cx="50" cy="38" r="20" fill={skin1} />
+      <ellipse cx="50" cy="46" rx="11" ry="7" fill={skin2} opacity="0.55" />
+
+      {/* Bandana — wraps around forehead */}
+      <path d="M31,34 Q50,20 69,34 Q66,40 50,40 Q34,40 31,34 Z" fill={bandana} />
+      {/* Bandana knot/tail at back */}
+      <path d="M69,34 Q74,30 76,36 Q72,40 68,38 Z" fill={bandana} opacity="0.85" />
+      {/* Bandana highlight */}
+      <path d="M33,33 Q50,22 67,33" stroke="#E74C3C" strokeWidth="1" fill="none" opacity="0.5" />
+
+      {/* ── EYES ── */}
+      <ellipse cx="42" cy="40" rx="4.5" ry="5" fill={dark} />
+      <ellipse cx="58" cy="40" rx="4.5" ry="5" fill={dark} />
+      <circle cx="44" cy="37" r={level >= 2 ? 1.8 : 1.2} fill="white" />
+      <circle cx="60" cy="37" r={level >= 2 ? 1.8 : 1.2} fill="white" />
+
+      {/* Nose */}
+      <ellipse cx="50" cy="44" rx="3.5" ry="2.5" fill={dark} opacity="0.45" />
+
+      {/* Mouth — slight smile */}
+      <path d="M44,48.5 Q50,53 56,48.5" stroke={dark} strokeWidth="1.4" fill="none" strokeLinecap="round" />
+
+      {/* L3+: gold sparkles */}
+      {level >= 3 && (
+        <>
+          <text x="8"  y="24" fontSize="9" fill={gold}>✦</text>
+          <text x="80" y="20" fontSize="7" fill={gold}>✦</text>
+          <text x="6"  y="74" fontSize="6" fill={gold}>✦</text>
+        </>
+      )}
+
+      {/* L5: crown */}
+      {level >= 5 && (
+        <>
+          <path d="M35,20 L38,11 L43,18 L50,9 L57,18 L62,11 L65,20 Z" fill={gold} stroke="#C8A000" strokeWidth="0.8" />
+          <rect x="35" y="19" width="30" height="3" rx="1.5" fill={gold} />
+        </>
+      )}
+    </svg>
+  );
+}
+
+// ─── Hermione Granger ─────────────────────────────────────────────────────────
+// Iconic look: voluminous brown hair, white shirt, Gryffindor tie, wand in hand
+function HermioneSVG({ level, px }: { level: number; px: number }) {
+  const skin    = "#F5DEB3"; // fair skin tone
+  const skinShd = "#E8C89A"; // shadow
+  const hair    = "#5C3A1E"; // rich brown, bushy
+  const hairHi  = "#7A4E2A"; // highlight
+  const shirt   = "#F0F0E8"; // white shirt
+  const tie1    = "#C0392B"; // Gryffindor red
+  const tie2    = "#F5C400"; // Gryffindor gold stripe
+  const wand    = "#4A2A10"; // dark wood wand
+  const magic   = "#A050F0"; // purple sparkle at wand tip
+  const dark    = "#1A0E08";
+  const gold    = "#F5C400";
+  const aura    = "#6B21A8"; // purple aura at L4
+
+  return (
+    <svg width={px} height={px} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-label={`Hermione Level ${level}`}>
+
+      {/* L4+: purple magic aura */}
+      {level >= 4 && (
+        <ellipse cx="50" cy="58" rx="40" ry="34" fill="none" stroke={aura} strokeWidth="2.5" opacity="0.45" />
+      )}
+
+      {/* ── BUSHY HAIR BACK LAYER (drawn before head) ── */}
+      <ellipse cx="50" cy="34" rx="26" ry="28" fill={hair} />
+      {/* Side puffs */}
+      <ellipse cx="28" cy="36" rx="11" ry="18" fill={hair} />
+      <ellipse cx="72" cy="36" rx="11" ry="18" fill={hair} />
+      {/* Top volume */}
+      <ellipse cx="50" cy="16" rx="18" ry="12" fill={hair} />
+
+      {/* ── BODY / SHIRT ── */}
+      <ellipse cx="50" cy="80" rx="18" ry="15" fill={shirt} />
+      {/* Collar area */}
+      <ellipse cx="50" cy="64" rx="10" ry="8" fill={shirt} />
+
+      {/* Gryffindor tie */}
+      <path d="M47,62 L50,82 L53,62 Z" fill={tie1} />
+      {/* Gold stripe on tie */}
+      <path d="M47.5,68 L52.5,68" stroke={tie2} strokeWidth="1.5" />
+      <path d="M47.2,73 L52.8,73" stroke={tie2} strokeWidth="1.5" />
+
+      {/* Arms */}
+      <ellipse cx="32" cy="76" rx="8" ry="13" fill={shirt} />
+      <ellipse cx="68" cy="76" rx="8" ry="13" fill={shirt} />
+
+      {/* Left hand */}
+      <ellipse cx="32" cy="89" rx="6" ry="4.5" fill={skin} />
+      {/* Right hand holding wand */}
+      <ellipse cx="68" cy="89" rx="5.5" ry="4.5" fill={skin} />
+      {/* Wand */}
+      <rect x="65" y="75" width="3" height="22" rx="1.5" fill={wand} transform="rotate(15 68 86)" />
+      {/* Wand tip magic glow */}
+      {level >= 2 && (
+        <circle cx="74" cy="75" r="3.5" fill={magic} opacity="0.7" />
+      )}
+      {level >= 3 && (
+        <>
+          <circle cx="74" cy="75" r="5.5" fill={magic} opacity="0.25" />
+          <text x="76" y="68" fontSize="8" fill={magic}>✦</text>
+        </>
+      )}
+
+      {/* ── NECK ── */}
+      <rect x="44" y="54" width="12" height="12" rx="5" fill={skin} />
+
+      {/* ── HEAD ── */}
+      <circle cx="50" cy="36" r="18" fill={skin} />
+      <ellipse cx="50" cy="44" rx="10" ry="6.5" fill={skinShd} opacity="0.4" />
+
+      {/* Hair front framing (over head) */}
+      <path d="M33,28 Q32,18 40,16 Q50,14 60,16 Q68,18 67,28" fill={hair} stroke={hair} strokeWidth="0.5" />
+      {/* Hair volume sides */}
+      <path d="M33,28 Q28,34 30,44" stroke={hairHi} strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M67,28 Q72,34 70,44" stroke={hairHi} strokeWidth="3" fill="none" strokeLinecap="round" />
+
+      {/* ── EYES — warm brown ── */}
+      <ellipse cx="43" cy="36" rx="5" ry="5.5" fill={dark} />
+      <ellipse cx="57" cy="36" rx="5" ry="5.5" fill={dark} />
+      {/* Warm brown iris */}
+      <ellipse cx="43" cy="37" rx="3.5" ry="3.8" fill="#6B3A1E" />
+      <ellipse cx="57" cy="37" rx="3.5" ry="3.8" fill="#6B3A1E" />
+      <circle cx="45" cy="33.5" r={level >= 2 ? 2 : 1.3} fill="white" />
+      <circle cx="59" cy="33.5" r={level >= 2 ? 2 : 1.3} fill="white" />
+
+      {/* Eyebrows */}
+      <path d="M39,30 Q43,28 47,30" stroke={hair} strokeWidth="1.2" fill="none" strokeLinecap="round" />
+      <path d="M53,30 Q57,28 61,30" stroke={hair} strokeWidth="1.2" fill="none" strokeLinecap="round" />
+
+      {/* Nose */}
+      <ellipse cx="50" cy="42" rx="2.5" ry="2" fill={skinShd} opacity="0.6" />
+
+      {/* Mouth — determined expression */}
+      <path d="M45,46.5 Q50,50 55,46.5" stroke={dark} strokeWidth="1.2" fill="none" strokeLinecap="round" />
+
+      {/* L3+: gold sparkles */}
+      {level >= 3 && (
+        <>
+          <text x="6"  y="22" fontSize="9" fill={gold}>✦</text>
+          <text x="80" y="18" fontSize="7" fill={gold}>✦</text>
+          <text x="5"  y="76" fontSize="6" fill={gold}>✦</text>
+        </>
+      )}
+
+      {/* L5: crown */}
+      {level >= 5 && (
+        <>
+          <path d="M35,14 L38,5 L43,12 L50,3 L57,12 L62,5 L65,14 Z" fill={gold} stroke="#C8A000" strokeWidth="0.8" />
+          <rect x="35" y="13" width="30" height="3" rx="1.5" fill={gold} />
         </>
       )}
     </svg>

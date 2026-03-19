@@ -10,6 +10,7 @@ import CharacterAvatar from "@/components/CharacterAvatar";
 import { useAppStore } from "@/store/useAppStore";
 import { computeChildStats } from "@/lib/gamification";
 import { isKidPresentNow } from "@/lib/custody";
+import { COLOR_MAP } from "@/lib/colors";
 import { CheckCircleIcon, XCircleIcon, ArrowRightIcon } from "@heroicons/react/24/solid";
 
 interface DashboardClientProps {
@@ -128,7 +129,7 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`text-2xl font-bold ${stats.child.color === "orange" ? "text-orange-300" : "text-purple-300"}`}>
+                  <p className={`text-2xl font-bold ${COLOR_MAP[stats.child.color ?? "purple"].text}`}>
                     {stats.totalXP}
                   </p>
                   <p className="text-xs text-white/50">Gesamt-XP</p>
@@ -154,6 +155,19 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
             </Link>
           ))}
         </div>
+
+        {/* Statistik link */}
+        <Link
+          href="/statistik"
+          className="glass rounded-2xl p-4 flex items-center gap-3 hover:bg-white/10 transition-all active:scale-98 border border-purple-500/20"
+        >
+          <span className="text-3xl">📊</span>
+          <div className="flex-1">
+            <p className="font-bold text-white">Statistik</p>
+            <p className="text-white/50 text-sm">Wer hat welche Aufgabe wie oft erledigt</p>
+          </div>
+          <ArrowRightIcon className="w-5 h-5 text-white/40" />
+        </Link>
 
         {/* Redemptions today */}
         {data.redemptions.length > 0 && (

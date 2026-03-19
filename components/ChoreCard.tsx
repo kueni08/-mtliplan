@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { CheckCircleIcon } from "@heroicons/react/24/solid";
-import type { Chore } from "@/lib/types";
+import type { Chore, MemberColor } from "@/lib/types";
+import { COLOR_MAP } from "@/lib/colors";
 
 interface ChoreCardProps {
   chore: Chore;
   completed: boolean;
   pending: boolean;
   onComplete: () => void;
-  childColor?: "purple" | "orange";
+  childColor?: MemberColor;
 }
 
 const categoryColors: Record<string, string> = {
@@ -28,6 +29,7 @@ export default function ChoreCard({
 }: ChoreCardProps) {
   const [pressed, setPressed] = useState(false);
   const colorClass = categoryColors[chore.category] ?? categoryColors.sonstiges;
+  const { text: xpColor, bg: btnColor } = COLOR_MAP[childColor];
 
   const handlePress = () => {
     if (completed || pending) return;
@@ -37,12 +39,6 @@ export default function ChoreCard({
       onComplete();
     }, 200);
   };
-
-  const xpColor = childColor === "orange" ? "text-orange-400" : "text-purple-400";
-  const btnColor =
-    childColor === "orange"
-      ? "bg-orange-500 hover:bg-orange-400"
-      : "bg-purple-600 hover:bg-purple-500";
 
   return (
     <div
