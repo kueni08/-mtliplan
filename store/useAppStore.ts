@@ -3,7 +3,40 @@
 import { create } from "zustand";
 import { readAppData, writeAppData } from "@/lib/drive";
 import type { AppData, Completion, Redemption, Chore, Reward, HouseholdMember, LevelConfig, PresenceSchedule, ChoreAssignment, SkinUnlockConfig } from "@/lib/types";
+import { migrateData } from "@/lib/driveUtils";
 import { v4 as uuidv4 } from "uuid";
+
+// ── localStorage helpers (SSR-safe) ──────────────────────────────────────────
+
+const LS_DATA_KEY    = "amtliplan-data";
+const LS_PENDING_KEY = "amtliplan-pending";
+
+function lsWrite(data: AppData): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(LS_DATA_KEY, JSON.stringify(data)); } catch { /* quota */ }
+}
+
+function lsRead(): AppData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(LS_DATA_KEY);
+    if (!raw) return null;
+    return migrateData(JSON.parse(raw) as AppData);
+  } catch { return null; }
+}
+
+function lsSetPending(v: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (v) localStorage.setItem(LS_PENDING_KEY, "1");
+    else   localStorage.removeItem(LS_PENDING_KEY);
+  } catch { /* silent */ }
+}
+
+function lsIsPending(): boolean {
+  if (typeof window === "undefined") return false;
+  try { return localStorage.getItem(LS_PENDING_KEY) === "1"; } catch { return false; }
+}
 
 interface AppStore {
   data: AppData | null;
@@ -11,7 +44,14 @@ interface AppStore {
   saving: boolean;
   error: string | null;
 
+  // Sync / offline state
+  syncStatus: "idle" | "synced" | "pending" | "syncing" | "error";
+  lastSyncedAt: string | null;
+  isOnline: boolean;
+
   _save: (data: AppData) => Promise<void>;
+  syncToDrive: () => Promise<void>;
+  setOnline: (isOnline: boolean) => void;
 
   loadData: () => Promise<void>;
 
@@ -64,14 +104,52 @@ export const useAppStore = create<AppStore>((set, get) => ({
   loading: false,
   saving: false,
   error: null,
+  syncStatus: "idle",
+  lastSyncedAt: null,
+  isOnline: typeof window !== "undefined" ? navigator.onLine : true,
 
   loadData: async () => {
     set({ loading: true, error: null });
+
+    // Phase 1: instant local hydration
+    const local = lsRead();
+    if (local) {
+      set({ data: local, syncStatus: lsIsPending() ? "pending" : "synced" });
+    }
+
+    // Phase 2: network sync
+    const { isOnline } = get();
+    if (!isOnline) {
+      set({ loading: false, syncStatus: lsIsPending() ? "pending" : (local ? "synced" : "idle") });
+      return;
+    }
+
     try {
-      const data = await readAppData();
-      set({ data, loading: false });
+      set({ syncStatus: "syncing" });
+
+      if (lsIsPending() && local) {
+        // Push local changes → Drive
+        await writeAppData(local);
+        lsSetPending(false);
+        set({ loading: false, syncStatus: "synced", lastSyncedAt: new Date().toISOString(), error: null });
+      } else {
+        // Pull Drive → local
+        const driveData = await readAppData();
+        // Guard: a save may have occurred while we were pulling
+        if (lsIsPending()) {
+          set({ loading: false, syncStatus: "pending" });
+          return;
+        }
+        lsWrite(driveData);
+        set({ loading: false, data: driveData, syncStatus: "synced", lastSyncedAt: new Date().toISOString(), error: null });
+      }
     } catch (e) {
-      set({ loading: false, error: String(e) });
+      if (local) {
+        // Drive failed but local data is fine — don't show full error screen
+        set({ loading: false, syncStatus: "error", error: String(e) });
+      } else {
+        set({ loading: false, error: String(e), syncStatus: "error" });
+      }
     }
   },
 
@@ -349,13 +427,47 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   _save: async (updated: AppData) => {
+    // 1. Update in-memory + localStorage immediately
     set({ saving: true, data: updated });
-    try {
-      await writeAppData(updated);
-    } catch (e) {
-      set({ error: String(e) });
-    } finally {
+    lsWrite(updated);
+    lsSetPending(true);
+    set({ syncStatus: "pending" });
+
+    // 2. Attempt Drive write if online
+    const { isOnline } = get();
+    if (!isOnline) {
       set({ saving: false });
+      return;
+    }
+
+    try {
+      set({ syncStatus: "syncing" });
+      await writeAppData(updated);
+      lsSetPending(false);
+      set({ saving: false, syncStatus: "synced", lastSyncedAt: new Date().toISOString(), error: null });
+    } catch (e) {
+      // Local is safe; surface error in status bar only (no full-screen error)
+      set({ saving: false, syncStatus: "error", error: String(e) });
+    }
+  },
+
+  syncToDrive: async () => {
+    const { data, syncStatus } = get();
+    if (!data || syncStatus === "syncing") return;
+    set({ syncStatus: "syncing", error: null });
+    try {
+      await writeAppData(data);
+      lsSetPending(false);
+      set({ syncStatus: "synced", lastSyncedAt: new Date().toISOString() });
+    } catch (e) {
+      set({ syncStatus: "error", error: String(e) });
+    }
+  },
+
+  setOnline: (isOnline: boolean) => {
+    set({ isOnline });
+    if (isOnline && lsIsPending()) {
+      get().syncToDrive();
     }
   },
 }));
