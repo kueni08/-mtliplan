@@ -81,9 +81,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const chore = data.chores.find((c) => c.id === choreId);
     if (!chore) return;
 
-    // Adults are auto-approved (trusted household members)
+    // Adults are auto-approved only if no other adult exists (single-adult household)
     const memberRole = data.settings.children.find((m) => m.id === childId)?.role;
-    const autoApprove = memberRole === "adult";
+    const otherAdultsExist = data.settings.children.some((m) => m.id !== childId && m.role === "adult");
+    const autoApprove = memberRole === "adult" && !otherAdultsExist;
 
     const completion: Completion = {
       id: uuidv4(),
@@ -102,7 +103,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const { data } = get();
     if (!data) return;
     const memberRole = data.settings.children.find((m) => m.id === childId)?.role;
-    const autoApprove = memberRole === "adult";
+    const otherAdultsExist2 = data.settings.children.some((m) => m.id !== childId && m.role === "adult");
+    const autoApprove = memberRole === "adult" && !otherAdultsExist2;
     const completion: Completion = {
       id: uuidv4(),
       choreId: null,

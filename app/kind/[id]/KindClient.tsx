@@ -11,6 +11,7 @@ import CharacterAvatar from "@/components/CharacterAvatar";
 import { useAppStore } from "@/store/useAppStore";
 import { computeChildStats, hasCompletedChoreToday, getLevelInfo, CHARACTER_SKILLS, DEFAULT_LEVELS, computeStreak } from "@/lib/gamification";
 import { COLOR_MAP } from "@/lib/colors";
+import { getWisdomOfTheDay } from "@/lib/wisdoms";
 
 interface KindClientProps {
   childId: string;
@@ -40,9 +41,10 @@ function relativeLabel(dateStr: string, today: string): string {
 }
 
 function KindContent({ childId }: KindClientProps) {
-  const { data, markChoreComplete, redeemReward, suggestAdHocTask, toggleFavoriteChore, updateChild } = useAppStore();
+  const { data, markChoreComplete, redeemReward, suggestAdHocTask, toggleFavoriteChore, updateChild, approveCompletionWithXp } = useAppStore();
   const [justLeveledUp, setJustLeveledUp] = useState(false);
   const [xpAnimation, setXpAnimation] = useState<number | null>(null);
+  const [wisdomVisible, setWisdomVisible] = useState(false);
   const [adhocNote, setAdhocNote]   = useState("");
   const [adhocXp,   setAdhocXp]    = useState(5);
   const [adhocSent, setAdhocSent]   = useState(false);
@@ -112,7 +114,8 @@ function KindContent({ childId }: KindClientProps) {
     const chore = data.chores.find((c) => c.id === choreId);
     if (chore) {
       setXpAnimation(chore.xp);
-      setTimeout(() => setXpAnimation(null), 2000);
+      setWisdomVisible(true);
+      setTimeout(() => { setXpAnimation(null); setWisdomVisible(false); }, 4000);
     }
   };
 
@@ -165,10 +168,14 @@ function KindContent({ childId }: KindClientProps) {
 
   // ── Adult view ────────────────────────────────────────────────────────────
   if (child.role === "adult") {
-    const favIds     = child.favoriteChoreIds ?? [];
-    const allActive  = data.chores.filter((c) => c.active).sort((a, b) => a.title.localeCompare(b.title));
-    const favorites  = allActive.filter((c) => favIds.includes(c.id));
-    const rest       = allActive.filter((c) => !favIds.includes(c.id));
+    const favIds       = child.favoriteChoreIds ?? [];
+    const allActive    = data.chores.filter((c) => c.active).sort((a, b) => a.title.localeCompare(b.title));
+    const favorites    = allActive.filter((c) => favIds.includes(c.id));
+    const rest         = allActive.filter((c) => !favIds.includes(c.id));
+    const approvedAll  = data.completions.filter((c) => c.approved);
+    const pendingAll   = data.completions.filter((c) => !c.approved);
+    // Own pending completions (awaiting approval from another adult)
+    const ownPending   = pendingAll.filter((c) => c.childId === childId);
 
     return (
       <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
@@ -211,9 +218,9 @@ function KindContent({ childId }: KindClientProps) {
                 <div className="flex-1">
                   <ChoreCard
                     chore={chore}
-                    completed={hasCompletedChoreToday(data.completions.filter((c) => c.approved), chore.id, childId)}
-                    pending={false}
-                    onComplete={() => markChoreComplete(chore.id, childId)}
+                    completed={hasCompletedChoreToday(approvedAll, chore.id, childId)}
+                    pending={hasCompletedChoreToday(pendingAll, chore.id, childId)}
+                    onComplete={() => handleChoreComplete(chore.id)}
                     childColor={child.color}
                   />
                 </div>
@@ -296,6 +303,42 @@ function KindContent({ childId }: KindClientProps) {
           )}
         </div>
 
+        {/* Own pending completions – self-approve or wait for another adult */}
+        {ownPending.length > 0 && (
+          <div className="glass rounded-3xl p-4 space-y-3 border border-yellow-500/30">
+            <h2 className="text-sm font-bold text-yellow-300 uppercase tracking-wide">⏳ Warten auf Freigabe ({ownPending.length})</h2>
+            <div className="space-y-2">
+              {ownPending.map((comp) => {
+                const chore = comp.choreId ? data.chores.find((c) => c.id === comp.choreId) : null;
+                const label = chore ? `${chore.emoji} ${chore.title}` : `✏️ ${comp.note ?? "Zusatzaufgabe"}`;
+                return (
+                  <div key={comp.id} className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2">
+                    <span className="flex-1 text-white/80 text-sm truncate">{label}</span>
+                    <span className={`text-xs font-bold ${xpColor}`}>+{comp.xp} XP</span>
+                    <button
+                      onClick={() => approveCompletionWithXp(comp.id, comp.xp)}
+                      className="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-xl font-semibold transition-all"
+                    >
+                      ✓ Selbst freigeben
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-white/30 text-xs">Oder warte auf die Freigabe durch eine andere erwachsene Person.</p>
+          </div>
+        )}
+
+        {/* XP / Wisdom overlay */}
+        {wisdomVisible && xpAnimation !== null && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-72">
+            <div className="bg-green-600/95 backdrop-blur-sm text-white px-5 py-4 rounded-2xl shadow-2xl space-y-2 text-center">
+              <p className="font-black text-2xl">+{xpAnimation} XP 🎉</p>
+              <p className="text-white/80 text-sm italic">&ldquo;{getWisdomOfTheDay()}&rdquo;</p>
+            </div>
+          </div>
+        )}
+
         {/* Reward shop */}
         <RewardShop
           rewards={data.rewards.filter((r) => {
@@ -312,11 +355,12 @@ function KindContent({ childId }: KindClientProps) {
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
-      {/* XP animation overlay */}
-      {xpAnimation !== null && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="bg-green-500 text-white font-bold text-2xl px-6 py-3 rounded-2xl shadow-lg animate-bounce">
-            +{xpAnimation} XP 🎉
+      {/* XP animation + Weisheit overlay */}
+      {wisdomVisible && xpAnimation !== null && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-72">
+          <div className="bg-green-600/95 backdrop-blur-sm text-white px-5 py-4 rounded-2xl shadow-2xl space-y-2 text-center">
+            <p className="font-black text-2xl">+{xpAnimation} XP 🎉</p>
+            <p className="text-white/80 text-sm italic">&ldquo;{getWisdomOfTheDay()}&rdquo;</p>
           </div>
         </div>
       )}
