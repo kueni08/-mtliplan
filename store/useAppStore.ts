@@ -16,7 +16,7 @@ interface AppStore {
   loadData: () => Promise<void>;
 
   // Chore completions
-  markChoreComplete: (choreId: string, childId: string) => Promise<void>;
+  markChoreComplete: (choreId: string, childId: string, forceApprove?: boolean) => Promise<void>;
   suggestAdHocTask: (childId: string, note: string, suggestedXp: number) => Promise<void>;
   approveCompletion: (completionId: string) => Promise<void>;
   approveCompletionWithXp: (completionId: string, xp: number) => Promise<void>;
@@ -75,16 +75,16 @@ export const useAppStore = create<AppStore>((set, get) => ({
     }
   },
 
-  markChoreComplete: async (choreId, childId) => {
+  markChoreComplete: async (choreId, childId, forceApprove = false) => {
     const { data } = get();
     if (!data) return;
     const chore = data.chores.find((c) => c.id === choreId);
     if (!chore) return;
 
-    // Adults are auto-approved only if no other adult exists (single-adult household)
+    // Adults are auto-approved only if forceApprove (admin) or no other adult exists
     const memberRole = data.settings.children.find((m) => m.id === childId)?.role;
     const otherAdultsExist = data.settings.children.some((m) => m.id !== childId && m.role === "adult");
-    const autoApprove = memberRole === "adult" && !otherAdultsExist;
+    const autoApprove = forceApprove || (memberRole === "adult" && !otherAdultsExist);
 
     const completion: Completion = {
       id: uuidv4(),

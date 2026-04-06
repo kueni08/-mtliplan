@@ -8,6 +8,7 @@ import LevelBadge from "@/components/LevelBadge";
 import ChoreCard from "@/components/ChoreCard";
 import RewardShop from "@/components/RewardShop";
 import CharacterAvatar from "@/components/CharacterAvatar";
+import { useSession } from "next-auth/react";
 import { useAppStore } from "@/store/useAppStore";
 import { computeChildStats, hasCompletedChoreToday, getLevelInfo, CHARACTER_SKILLS, DEFAULT_LEVELS, computeStreak } from "@/lib/gamification";
 import { COLOR_MAP } from "@/lib/colors";
@@ -41,10 +42,13 @@ function relativeLabel(dateStr: string, today: string): string {
 }
 
 function KindContent({ childId }: KindClientProps) {
+  const { data: session } = useSession();
+  const isAdmin = session?.role === "admin";
   const { data, markChoreComplete, redeemReward, suggestAdHocTask, toggleFavoriteChore, updateChild, approveCompletionWithXp } = useAppStore();
   const [justLeveledUp, setJustLeveledUp] = useState(false);
   const [xpAnimation, setXpAnimation] = useState<number | null>(null);
   const [wisdomVisible, setWisdomVisible] = useState(false);
+  const [adultTab, setAdultTab] = useState<"aufgaben" | "haushalt">("aufgaben");
   const [adhocNote, setAdhocNote]   = useState("");
   const [adhocXp,   setAdhocXp]    = useState(5);
   const [adhocSent, setAdhocSent]   = useState(false);
@@ -110,7 +114,7 @@ function KindContent({ childId }: KindClientProps) {
   const pendingToday  = data.completions.filter((c) => !c.approved);
 
   const handleChoreComplete = async (choreId: string) => {
-    await markChoreComplete(choreId, childId);
+    await markChoreComplete(choreId, childId, isAdmin);
     const chore = data.chores.find((c) => c.id === choreId);
     if (chore) {
       setXpAnimation(chore.xp);
@@ -168,17 +172,27 @@ function KindContent({ childId }: KindClientProps) {
 
   // ── Adult view ────────────────────────────────────────────────────────────
   if (child.role === "adult") {
-    const favIds       = child.favoriteChoreIds ?? [];
-    const allActive    = data.chores.filter((c) => c.active).sort((a, b) => a.title.localeCompare(b.title));
-    const favorites    = allActive.filter((c) => favIds.includes(c.id));
-    const rest         = allActive.filter((c) => !favIds.includes(c.id));
-    const approvedAll  = data.completions.filter((c) => c.approved);
-    const pendingAll   = data.completions.filter((c) => !c.approved);
-    // Own pending completions (awaiting approval from another adult)
-    const ownPending   = pendingAll.filter((c) => c.childId === childId);
+    const favIds      = child.favoriteChoreIds ?? [];
+    const allActive   = data.chores.filter((c) => c.active).sort((a, b) => a.title.localeCompare(b.title));
+    const favorites   = allActive.filter((c) => favIds.includes(c.id));
+    const rest        = allActive.filter((c) => !favIds.includes(c.id));
+    const approvedAll = data.completions.filter((c) => c.approved);
+    const pendingAll  = data.completions.filter((c) => !c.approved);
+    const ownPending  = pendingAll.filter((c) => c.childId === childId);
+    const allMembers  = data.settings.children;
 
     return (
-      <div className="max-w-lg mx-auto px-4 pt-6 space-y-6">
+      <div className="max-w-lg mx-auto px-4 pt-6 space-y-5">
+        {/* XP / Wisdom overlay */}
+        {wisdomVisible && xpAnimation !== null && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-72">
+            <div className="bg-green-600/95 backdrop-blur-sm text-white px-5 py-4 rounded-2xl shadow-2xl space-y-2 text-center">
+              <p className="font-black text-2xl">+{xpAnimation} XP 🎉</p>
+              <p className="text-white/80 text-sm italic">&ldquo;{getWisdomOfTheDay()}&rdquo;</p>
+            </div>
+          </div>
+        )}
+
         {/* Profile header */}
         <div className={`glass rounded-3xl p-5 bg-gradient-to-br ${bgGradient} space-y-4`}>
           <div className="flex items-center gap-4">
@@ -209,146 +223,182 @@ function KindContent({ childId }: KindClientProps) {
           )}
         </div>
 
-        {/* Favorites */}
-        {favorites.length > 0 && (
-          <div className="space-y-2">
-            <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">⭐ Favoriten</h2>
-            {favorites.map((chore) => (
-              <div key={chore.id} className="flex items-center gap-2">
-                <div className="flex-1">
-                  <ChoreCard
-                    chore={chore}
-                    completed={hasCompletedChoreToday(approvedAll, chore.id, childId)}
-                    pending={hasCompletedChoreToday(pendingAll, chore.id, childId)}
-                    onComplete={() => handleChoreComplete(chore.id)}
-                    childColor={child.color}
-                  />
-                </div>
-                <button
-                  onClick={() => toggleFavoriteChore(childId, chore.id)}
-                  className="text-yellow-400 hover:text-white/50 text-xl transition-colors shrink-0"
-                  title="Aus Favoriten entfernen"
-                >
-                  📌
-                </button>
-              </div>
-            ))}
-            <div className="flex items-center gap-3 my-2">
-              <div className="flex-1 h-px bg-white/10" />
-            </div>
-          </div>
-        )}
-
-        {/* All chores */}
-        <div className="space-y-2">
-          <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">📋 Alle Aufgaben</h2>
-          {rest.map((chore) => (
-            <div key={chore.id} className="flex items-center gap-2">
-              <div className="flex-1">
-                <ChoreCard
-                  chore={chore}
-                  completed={hasCompletedChoreToday(data.completions.filter((c) => c.approved), chore.id, childId)}
-                  pending={false}
-                  onComplete={() => markChoreComplete(chore.id, childId)}
-                  childColor={child.color}
-                />
-              </div>
-              <button
-                onClick={() => toggleFavoriteChore(childId, chore.id)}
-                className="text-white/30 hover:text-yellow-400 text-xl transition-colors shrink-0"
-                title="Zu Favoriten hinzufügen"
-              >
-                📌
-              </button>
-            </div>
+        {/* Tabs */}
+        <div className="flex gap-2">
+          {([["aufgaben", "📋 Aufgaben"], ["haushalt", "👥 Haushalt"]] as const).map(([t, label]) => (
+            <button
+              key={t}
+              onClick={() => setAdultTab(t)}
+              className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all ${
+                adultTab === t ? `${colorStyle.bg} text-white` : "bg-white/10 text-white/60"
+              }`}
+            >
+              {label}
+            </button>
           ))}
         </div>
 
-        {/* Adhoc */}
-        <div className="glass rounded-3xl p-4 space-y-3 border border-white/10">
-          <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">✏️ Zusatzaufgabe eintragen</h2>
-          {adhocSent ? (
-            <p className="text-green-400 text-sm text-center py-2">✅ Aufgabe eingetragen!</p>
-          ) : (
-            <div className="space-y-2">
-              <input
-                type="text"
-                value={adhocNote}
-                onChange={(e) => setAdhocNote(e.target.value)}
-                placeholder="Was hast du gemacht? z.B. Garage aufgeräumt"
-                className="w-full bg-white/10 text-white placeholder-white/30 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500/50"
-                maxLength={120}
-              />
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-white/50 shrink-0">XP:</label>
-                <input
-                  type="number"
-                  value={adhocXp}
-                  onChange={(e) => setAdhocXp(Math.max(1, parseInt(e.target.value) || 1))}
-                  min={1}
-                  max={500}
-                  className="w-20 bg-white/10 text-white rounded-xl px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-500/50"
-                />
-                <button
-                  onClick={handleAdhocSubmit}
-                  disabled={!adhocNote.trim()}
-                  className={`flex-1 py-1.5 rounded-xl text-sm font-semibold transition-all ${
-                    adhocNote.trim() ? `${colorStyle.bg} text-white` : "bg-white/10 text-white/30 cursor-not-allowed"
-                  }`}
-                >
-                  Eintragen
-                </button>
+        {/* ── Aufgaben tab ── */}
+        {adultTab === "aufgaben" && (
+          <div className="space-y-4">
+            {/* Own pending */}
+            {ownPending.length > 0 && !isAdmin && (
+              <div className="glass rounded-2xl p-4 space-y-2 border border-yellow-500/30">
+                <h2 className="text-sm font-bold text-yellow-300">⏳ Warten auf Freigabe ({ownPending.length})</h2>
+                {ownPending.map((comp) => {
+                  const chore = comp.choreId ? data.chores.find((c) => c.id === comp.choreId) : null;
+                  const label = chore ? `${chore.emoji} ${chore.title}` : `✏️ ${comp.note ?? "Zusatzaufgabe"}`;
+                  return (
+                    <div key={comp.id} className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2">
+                      <span className="flex-1 text-white/80 text-sm truncate">{label}</span>
+                      <span className={`text-xs font-bold ${xpColor}`}>+{comp.xp} XP</span>
+                      <button
+                        onClick={() => approveCompletionWithXp(comp.id, comp.xp)}
+                        className="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-xl font-semibold"
+                      >
+                        ✓ Freigeben
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Own pending completions – self-approve or wait for another adult */}
-        {ownPending.length > 0 && (
-          <div className="glass rounded-3xl p-4 space-y-3 border border-yellow-500/30">
-            <h2 className="text-sm font-bold text-yellow-300 uppercase tracking-wide">⏳ Warten auf Freigabe ({ownPending.length})</h2>
+            {/* Favorites */}
+            {favorites.length > 0 && (
+              <div className="space-y-2">
+                <h2 className="text-xs font-bold text-white/50 uppercase tracking-wide">⭐ Favoriten</h2>
+                {favorites.map((chore) => (
+                  <div key={chore.id} className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <ChoreCard
+                        chore={chore}
+                        completed={hasCompletedChoreToday(approvedAll, chore.id, childId)}
+                        pending={!isAdmin && hasCompletedChoreToday(pendingAll, chore.id, childId)}
+                        onComplete={() => handleChoreComplete(chore.id)}
+                        childColor={child.color}
+                      />
+                    </div>
+                    <button onClick={() => toggleFavoriteChore(childId, chore.id)} className="text-yellow-400 text-xl shrink-0">📌</button>
+                  </div>
+                ))}
+                <div className="h-px bg-white/10" />
+              </div>
+            )}
+
+            {/* All other chores */}
             <div className="space-y-2">
-              {ownPending.map((comp) => {
-                const chore = comp.choreId ? data.chores.find((c) => c.id === comp.choreId) : null;
-                const label = chore ? `${chore.emoji} ${chore.title}` : `✏️ ${comp.note ?? "Zusatzaufgabe"}`;
-                return (
-                  <div key={comp.id} className="flex items-center gap-3 bg-white/5 rounded-xl px-3 py-2">
-                    <span className="flex-1 text-white/80 text-sm truncate">{label}</span>
-                    <span className={`text-xs font-bold ${xpColor}`}>+{comp.xp} XP</span>
+              {favorites.length > 0 && <h2 className="text-xs font-bold text-white/50 uppercase tracking-wide">📋 Alle Aufgaben</h2>}
+              {rest.map((chore) => (
+                <div key={chore.id} className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <ChoreCard
+                      chore={chore}
+                      completed={hasCompletedChoreToday(approvedAll, chore.id, childId)}
+                      pending={!isAdmin && hasCompletedChoreToday(pendingAll, chore.id, childId)}
+                      onComplete={() => handleChoreComplete(chore.id)}
+                      childColor={child.color}
+                    />
+                  </div>
+                  <button onClick={() => toggleFavoriteChore(childId, chore.id)} className="text-white/30 hover:text-yellow-400 text-xl shrink-0">📌</button>
+                </div>
+              ))}
+            </div>
+
+            {/* Adhoc */}
+            <div className="glass rounded-2xl p-4 space-y-3 border border-white/10">
+              <h2 className="text-xs font-bold text-white/50 uppercase tracking-wide">✏️ Zusatzaufgabe</h2>
+              {adhocSent ? (
+                <p className="text-green-400 text-sm text-center py-1">✅ Aufgabe eingetragen!</p>
+              ) : (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    value={adhocNote}
+                    onChange={(e) => setAdhocNote(e.target.value)}
+                    placeholder="Was hast du gemacht?"
+                    className="w-full bg-white/10 text-white placeholder-white/30 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-purple-500/50"
+                    maxLength={120}
+                  />
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-white/50 shrink-0">XP:</label>
+                    <input
+                      type="number"
+                      value={adhocXp}
+                      onChange={(e) => setAdhocXp(Math.max(1, parseInt(e.target.value) || 1))}
+                      min={1}
+                      max={500}
+                      className="w-20 bg-white/10 text-white rounded-xl px-3 py-1.5 text-sm outline-none"
+                    />
                     <button
-                      onClick={() => approveCompletionWithXp(comp.id, comp.xp)}
-                      className="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-xl font-semibold transition-all"
+                      onClick={handleAdhocSubmit}
+                      disabled={!adhocNote.trim()}
+                      className={`flex-1 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                        adhocNote.trim() ? `${colorStyle.bg} text-white` : "bg-white/10 text-white/30 cursor-not-allowed"
+                      }`}
                     >
-                      ✓ Selbst freigeben
+                      Eintragen
                     </button>
                   </div>
-                );
+                </div>
+              )}
+            </div>
+
+            {/* Reward shop */}
+            <RewardShop
+              rewards={data.rewards.filter((r) => {
+                const ta = r.targetAudience ?? "child";
+                return ta === "all" || ta === "adult";
               })}
-            </div>
-            <p className="text-white/30 text-xs">Oder warte auf die Freigabe durch eine andere erwachsene Person.</p>
+              availableXP={stats.availableXP}
+              onRedeem={(rewardId) => redeemReward(rewardId, childId)}
+              childColor={child.color}
+            />
           </div>
         )}
 
-        {/* XP / Wisdom overlay */}
-        {wisdomVisible && xpAnimation !== null && (
-          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none w-72">
-            <div className="bg-green-600/95 backdrop-blur-sm text-white px-5 py-4 rounded-2xl shadow-2xl space-y-2 text-center">
-              <p className="font-black text-2xl">+{xpAnimation} XP 🎉</p>
-              <p className="text-white/80 text-sm italic">&ldquo;{getWisdomOfTheDay()}&rdquo;</p>
-            </div>
+        {/* ── Haushalt tab ── */}
+        {adultTab === "haushalt" && (
+          <div className="space-y-3">
+            {allMembers.map((m) => {
+              const mStats   = computeChildStats(data, m.id);
+              const mLvl     = getLevelInfo(mStats.totalXP, data.settings.levelConfig ?? DEFAULT_LEVELS);
+              const mColor   = COLOR_MAP[m.color ?? "purple"];
+              return (
+                <div key={m.id} className="glass rounded-2xl p-4 flex items-center gap-3">
+                  {m.characterTheme ? (
+                    <CharacterAvatar theme={m.characterTheme} level={mStats.level} size="sm" />
+                  ) : (
+                    <span className="text-3xl">{m.avatar}</span>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white">{m.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <LevelBadge level={mStats.level} size="sm" />
+                      {mStats.pendingCompletions.length > 0 && (
+                        <span className="text-xs text-yellow-300 bg-yellow-500/20 px-2 py-0.5 rounded-full">
+                          {mStats.pendingCompletions.length} ausstehend
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1.5">
+                      <XPBar
+                        current={mStats.xpInCurrentLevel}
+                        total={mLvl.isMaxLevel ? 1 : mLvl.xpForNextLevel - (mStats.level > 1 ? (data.settings.levelConfig ?? DEFAULT_LEVELS)[mStats.level - 1]?.minXP ?? 0 : 0)}
+                        percent={mStats.progressPercent}
+                        color={m.color}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`text-xl font-black ${mColor.text}`}>{mStats.totalXP}</p>
+                    <p className="text-xs text-white/40">XP</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
-
-        {/* Reward shop */}
-        <RewardShop
-          rewards={data.rewards.filter((r) => {
-            const ta = r.targetAudience ?? "child";
-            return ta === "all" || ta === "adult";
-          })}
-          availableXP={stats.availableXP}
-          onRedeem={(rewardId) => redeemReward(rewardId, childId)}
-          childColor={child.color}
-        />
       </div>
     );
   }
@@ -436,27 +486,18 @@ function KindContent({ childId }: KindClientProps) {
         <div className="glass rounded-3xl p-4 space-y-3">
           <h2 className="text-sm font-bold text-white/70 uppercase tracking-wide">⚔️ Fähigkeiten</h2>
           <div className="grid grid-cols-1 gap-2">
-            {CHARACTER_SKILLS[child.characterTheme].map((skill) => {
-              const unlocked = skill.level <= stats.level;
+            {CHARACTER_SKILLS[child.characterTheme].filter((skill) => skill.level <= stats.level).map((skill) => {
               return (
                 <div
                   key={skill.level}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2 transition-all ${
-                    unlocked
-                      ? "bg-white/10 border border-white/20"
-                      : "bg-white/3 border border-white/5 opacity-50"
-                  }`}
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 bg-white/10 border border-white/20"
                 >
-                  <span className="text-2xl">{unlocked ? skill.emoji : "🔒"}</span>
+                  <span className="text-2xl">{skill.emoji}</span>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-bold ${unlocked ? "text-white" : "text-white/40"}`}>
-                      {skill.name}
-                    </p>
-                    <p className={`text-xs ${unlocked ? "text-white/60" : "text-white/30"}`}>
-                      {unlocked ? skill.desc : `Level ${skill.level} erforderlich`}
-                    </p>
+                    <p className="text-sm font-bold text-white">{skill.name}</p>
+                    <p className="text-xs text-white/60">{skill.desc}</p>
                   </div>
-                  {unlocked && <span className="text-xs text-green-400 font-bold shrink-0">✓</span>}
+                  <span className="text-xs text-green-400 font-bold shrink-0">✓</span>
                 </div>
               );
             })}

@@ -25,10 +25,8 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
   if (!data) return null;
 
   const kidsPresent = isKidPresentNow(data.settings.custodySchedule.nextOurWeekend);
-  // Only show members with role "child" (or legacy entries without role)
-  const childStats = data.settings.children
-    .filter((c) => c.role === "child" || !c.role)
-    .map((c) => computeChildStats(data, c.id));
+  // Show ALL household members in Haushaltsübersicht
+  const allMemberStats = data.settings.children.map((c) => computeChildStats(data, c.id));
 
   const allPending = data.completions.filter((c) => !c.approved);
 
@@ -59,20 +57,6 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
           </div>
         </div>
 
-        {/* Adult: My Tasks card */}
-        {role === "adult" && memberId && (
-          <Link
-            href={`/kind/${memberId}`}
-            className="glass rounded-2xl p-4 flex items-center gap-3 hover:bg-white/10 transition-all active:scale-98 border border-blue-500/20"
-          >
-            <span className="text-3xl">📋</span>
-            <div className="flex-1">
-              <p className="font-bold text-white">Meine Aufgaben</p>
-              <p className="text-white/50 text-sm">Aufgaben ansehen & erledigen</p>
-            </div>
-            <ArrowRightIcon className="w-5 h-5 text-white/40" />
-          </Link>
-        )}
 
         {/* Pending approvals */}
         {allPending.length > 0 && (
@@ -107,10 +91,10 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
           </div>
         )}
 
-        {/* Child cards */}
+        {/* Haushaltsübersicht – all members */}
         <div className="space-y-3">
-          <h2 className="text-base font-bold text-white">Kinder-Übersicht</h2>
-          {childStats.map((stats) => (
+          <h2 className="text-base font-bold text-white">👥 Haushaltsübersicht</h2>
+          {allMemberStats.map((stats) => (
             <Link
               key={stats.child.id}
               href={`/kind/${stats.child.id}`}
@@ -125,7 +109,12 @@ function DashboardContent({ userName, role, memberId }: DashboardClientProps) {
                   )}
                   <div>
                     <p className="font-bold text-white text-lg">{stats.child.name}</p>
-                    <LevelBadge level={stats.level} size="sm" />
+                    <div className="flex items-center gap-2">
+                      <LevelBadge level={stats.level} size="sm" />
+                      {stats.child.role === "adult" && (
+                        <span className="text-xs text-blue-300/70">Erwachsen</span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="text-right">
