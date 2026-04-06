@@ -717,28 +717,26 @@ function MemberEditForm({
         </div>
       </div>
 
-      {role === "child" && (
-        <div>
-          <p className="text-xs text-white/50 mb-2">Charakter:</p>
-          <div className="flex gap-2 flex-wrap">
-            {THEME_OPTIONS.map(([t, label]) => (
-              <button
-                key={String(t)}
-                onClick={() => setTheme(t as HouseholdMember["characterTheme"])}
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                  theme === t ? "bg-purple-600 text-white" : "bg-white/10 text-white/60"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+      <div>
+        <p className="text-xs text-white/50 mb-2">Charakter (optional):</p>
+        <div className="flex gap-2 flex-wrap">
+          {THEME_OPTIONS.map(([t, label]) => (
+            <button
+              key={String(t)}
+              onClick={() => setTheme(t as HouseholdMember["characterTheme"])}
+              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                theme === t ? "bg-purple-600 text-white" : "bg-white/10 text-white/60"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       <div className="flex gap-2">
         <button
-          onClick={() => onSave({ name, email: email.trim() || undefined, avatar, color, role, characterTheme: role === "child" ? theme : undefined })}
+          onClick={() => onSave({ name, email: email.trim() || undefined, avatar, color, role, characterTheme: theme })}
           className="flex-1 bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl font-medium transition-all"
         >
           Speichern
@@ -864,7 +862,7 @@ function MemberAddForm({
 
       <div className="flex gap-2">
         <button
-          onClick={() => name && onSave({ name, email: email.trim() || undefined, avatar, color, role, characterTheme: role === "child" ? theme : undefined })}
+          onClick={() => name && onSave({ name, email: email.trim() || undefined, avatar, color, role, characterTheme: theme })}
           disabled={!name}
           className="flex-1 bg-purple-600 hover:bg-purple-500 disabled:bg-gray-600 text-white py-2 rounded-xl font-medium transition-all"
         >
